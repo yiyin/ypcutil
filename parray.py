@@ -78,7 +78,7 @@ def PitchTrans(shape, dst, dst_ld, src, src_ld, dtype, aligned=False, async = Fa
 
 
 class PitchArray(object):
-    def __init__(self, shape, dtype, gpudata=None, pitch = None):
+    def __init__(self, shape, dtype, gpudata=None, pitch = None, base = None):
         """create a PitchArray
         shape: shape of the array
         dtype: dtype of the array
@@ -122,6 +122,9 @@ class PitchArray(object):
                 self.shape = (1, s)
             else:
                 self.shape = (0, 0)
+
+        if len(self.shape) == 1:
+            self.shape = (1, self.shape[0])
             
         self.ndim = len(self.shape)
         
@@ -155,10 +158,10 @@ class PitchArray(object):
                 self.N = 0
                 self.ld = 0
                 self.mem_size = 0
-                
+            self.base = base
         else:
             #assumed that the device memory was also allocated by mem_alloc_pitch is required by the shape
-            assert gpudata.__class__ == cuda.DeviceAllocation
+            #assert gpudata.__class__ == cuda.DeviceAllocation
             
             if self.size:
                 self.gpudata = gpudata
@@ -177,7 +180,6 @@ class PitchArray(object):
                     self.mem_size = self.ld * self.shape[0]
                     self.M = self.shape[0]
                     self.N = _pd(self.shape)
-                        
             else:
                 self.gpudata = None
                 self.M = 0
@@ -185,9 +187,10 @@ class PitchArray(object):
                 self.ld = 0
                 self.mem_size = 0
                 print "warning: shape may not be assigned properly"
+            self.base = base
         self.nbytes = self.dtype.itemsize * self.mem_size
         self._grid, self._block = splay(self.mem_size, self.M)
-    
+    	
         
     def set(self, ary):
         """
@@ -211,7 +214,7 @@ class PitchArray(object):
         assert ary.size == self.size
         
         if ary.base.__class__ != cuda.HostAllocation:
-                raise TypeError("asynchronous memory trasfer requires pagelocked numpy array")
+            raise TypeError("asynchronous memory trasfer requires pagelocked numpy array")
                 
         if self.size:
             if self.M == 1:
@@ -910,7 +913,106 @@ class PitchArray(object):
         elif nrows == 1:
             cuda.memcpy_dtod(result.gpudata, int(self.gpudata) + start * self.ld * self.dtype.itemsize, self.dtype.itemsize * _pd(shape))
         return result
+    
+    def view(self, dtype = None):
+        if dtype is None:
+            dtype = self.dtype
+        old_itemsize = self.dtype.itemsize
+        itemsize = np.dtype(dtype).itemsize
         
+        if self.shape[-1] * old_itemsize % itemsize != 0:
+            raise ValueError("new type not compatible with array")
+
+        shape = self.shape[:-1] + (self.shape[-1] * old_itemsize // itemsize,)
+
+        return PitchArray(shape=shape, dtype=dtype, gpudata=int(self.gpudata),
+                          base=self)
+
+
+    def __getitem__(self, idx):
+        """
+        only support slicing a chunk of consecutive rows
+        """
+        if idx == ():
+            return self
+        
+        if isinstance(idx, slice):
+            start = idx.start
+            stop = idx.stop
+            step = idx.step
+            
+            if start is None:
+                start = 0
+            if stop is None:
+                stop = self.shape[0]
+            if step is None:
+                step = 1
+            
+            if step != 1:
+                raise NotImplementedError("non-consecutive slicing is not "
+                                          "implemented yet")
+            
+        elif isinstance(idx, tuple):
+            if len(idx) > 1:
+                axis = 1;
+                for tmp in idx[1:]:
+                    start = tmp.start
+                    stop = tmp.stop
+                    step = tmp.step
+                    if start is None:
+                        start = 0
+                    if stop is None:
+                        stop = self.shape[axis]
+                    if step is None:
+                        step = 1
+                    
+                    if (start != 0 or stop != self.shape[axis] or 
+                        step != 1):
+                        raise NotImplementedError("slicing only supported on "
+                            "axis = 0")
+                    axis += 1
+                
+                start = idx[0].start
+                stop = idx[0].stop
+                step = idx[0].step
+                if start is None:
+                    start = 0
+                if stop is None:
+                    stop = self.shape[0]
+                if step is None:
+                    step = 1
+                
+                if step != 1:
+                    raise NotImplementedError("non-consecutive slicing is "
+                                              "not implemented yet")
+        else:
+            raise ValueError("non-slice indexing not supported: %s" % (idx,))
+        
+        if stop > self.shape[0]:
+            stop = self.shape[0]
+            from warnings import warn
+            warn("array slicing larger than array size, "
+                 "reduce to allowed size")
+
+        if self.M == 1:
+            return PitchArray(shape=(1,stop-start), dtype = self.dtype,
+                              gpudata = int(self.gpudata) +
+                                    start*self.dtype.itemsize,
+                              base = self)
+        else:
+            if self.ndim == 2:
+                return PitchArray(shape=(stop-start,self.shape[1]),
+                                  dtype = self.dtype,
+                                  gpudata = int(self.gpudata) +
+                                        start*self.dtype.itemsize*self.ld,
+                                  base = self)
+            else:
+                return PitchArray(shape=(stop-start,self.shape[1],
+                                          self.shape[2]),
+                                  dtype = self.dtype,
+                                  gpudata = int(self.gpudata) +
+                                        start*self.dtype.itemsize*self.ld,
+                                  base = self)
         
 
 def to_gpu(ary):
