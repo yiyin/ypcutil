@@ -816,8 +816,11 @@ class PitchArray(object):
 
         if inplace:
             if shape[0] == self.shape[0]:
-                self.shape = shape
-                return self
+                #self.shape = shape
+                return PitchArray(shape = shape,
+                                  dtype = self.dtype,
+                                  gpudata = int(self.gpudata),
+                                  base = self)
             else:
                 raise ValueError("cannot resize inplacely")
 
@@ -951,7 +954,6 @@ class PitchArray(object):
             if step != 1:
                 raise NotImplementedError("non-consecutive slicing is not "
                                           "implemented yet")
-            
         elif isinstance(idx, tuple):
             if len(idx) > 1:
                 axis = 1;
@@ -968,13 +970,20 @@ class PitchArray(object):
                     
                     if (start != 0 or stop != self.shape[axis] or 
                         step != 1):
-                        raise NotImplementedError("slicing only supported on "
-                            "axis = 0")
+                        if self.M != 1:
+                            raise NotImplementedError(
+                            "slicing only supported on axis = 0")
                     axis += 1
                 
                 start = idx[0].start
                 stop = idx[0].stop
                 step = idx[0].step
+                if start is None and stop is None and step is None:
+                    if self.M == 1:
+                        if len(idx) == 2:
+                            start = idx[1].start
+                            stop = idx[1].stop
+                            step = idx[1].step
                 if start is None:
                     start = 0
                 if stop is None:
@@ -988,8 +997,9 @@ class PitchArray(object):
         else:
             raise ValueError("non-slice indexing not supported: %s" % (idx,))
         
-        if stop > self.shape[0]:
-            stop = self.shape[0]
+        maxshape = self.shape[1] if self.M == 1 else self.shape[0]
+        if stop > maxshape[0]:
+            stop = maxshape[0]
             from warnings import warn
             warn("array slicing larger than array size, "
                  "reduce to allowed size")
