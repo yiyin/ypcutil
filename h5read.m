@@ -16,4 +16,6 @@ else
     A = hdf5read(info.GroupHierarchy.Datasets);
 end
 
-A=A.';
+% If you want to keep the axis order the same as
+% in python, uncomment the following.
+%A = permute(A, fliplr([1:ndims(A)]));
