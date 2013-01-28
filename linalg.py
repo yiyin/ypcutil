@@ -1,35 +1,55 @@
 #!/usr/bin/env python
 
-
-import scikits.cuda.cula as cula
 import numpy as np
-import parray
 import pycuda.driver as cuda
 import pycuda.gpuarray as garray
-import scikits.cuda.cublas as cublas
-from kernel_utils import *
 from pycuda.tools import dtype_to_ctype
+
+import scikits.cuda.cublas as cublas
+import scikits.cuda.cula as cula
+from kernel_utils import *
+import parray
+
 
 """ assuming row major storage as in PitchArray """
 
 
-def dot(A, B, opa = 'n', opb = 'n', C = None, Cstart = None):
+def dot(A, B, opa = 'n', opb = 'n',
+        C = None, Cstart = None,
+        scale = 1.0, Cscale = 0.0):
     """
-    returns multiplication of two PitchArray A and B
+    Multiplication of two matrices A and B in PitchArray format
     if C is specified, use the memory in C.
     Specified C must have the same leading dimension as that of the result and
     the other dimension must be bigger or equal to that of the result.
-
-    opa: operation on A
+    
+    Parameters
+    ------------------------------------
+    A: parray.PitchArray
+    B: parray.PitchArray
+    opa: str
+         operation on A
          'n' or 'N': use A itself
          't' or 'T': use transpose of A
          'c' or 'C': use conjugate transpose of A
-         
-    opb: operation on B
+    opb: str
+         operation on B
          'n' or 'N': use B itself
          't' or 'T': use transpose of B
          'c' or 'C': use conjugate transpose of B
-
+    C: parray.PitchArray
+       if specified, the result will be stored in C
+    Cstart: int
+            the offset start of C array
+    scale: float
+            scaling factor for A*B
+            see Cscale
+    Cscale: float
+            scaling factor for C
+            result will be C = C*Cscale + scale*A*B
+    
+    Note:
+    works only for CUDA VERSION > 4.0 where handle is introduced.
     """
     
     if A.dtype != B.dtype:
@@ -37,7 +57,6 @@ def dot(A, B, opa = 'n', opb = 'n', C = None, Cstart = None):
 
     if (len(A.shape) != 2) | (len(B.shape) != 2):
         raise TypeError("A, B must both be matrices")
-
 
     if opa in ['n', 'N']:
         m,n = A.shape
@@ -54,7 +73,8 @@ def dot(A, B, opa = 'n', opb = 'n', C = None, Cstart = None):
         raise ValueError("unknown value assigned to opa")
 
     if (k != n) | (0 in [m,n,l]):
-        raise ValueError("matrix dimension mismatch, (%d,%d) with (%d,%d)" % (m,n,k,l))
+        raise ValueError("matrix dimension mismatch, "
+                         "(%d,%d) with (%d,%d)" % (m,n,k,l))
 
     dtype = A.dtype
     if dtype in [np.float32, np.float64]:
@@ -64,8 +84,8 @@ def dot(A, B, opa = 'n', opb = 'n', C = None, Cstart = None):
         if opa in ['c', 'C']:
             opa = 't'
         
-
-
+    scale = dtype.type(scale)
+    Cscale = dtype.type(Cscale)
     
     if dtype == np.float64:
         tp = 'cublas.cublasD'
@@ -83,15 +103,26 @@ def dot(A, B, opa = 'n', opb = 'n', C = None, Cstart = None):
     if C is None:
         C = parray.empty((m,l), dtype)
         Cstart = 0
+        Cempty = True
+        Cscale = dtype.type(0)
     else:
+        Cempty = False
         if Cstart is None:
             Cstart = 0
-        
         if C.shape[1] != l:
-            raise AttributeError("shape of the provided result array " + C.shape.__str__() + " does not match intended result " + (m,l).__str__())
+            raise AttributeError("shape of the provided result array "
+                                 + C.shape.__str__()
+                                 + " does not match intended result " 
+                                 + (m,l).__str__())
         if C.shape[0] < m + Cstart:
-            raise AttributeError("shape of the provided result array " + C.shape.__str__() + " does not match intended result " + (m,l).__str__())
-            
+            raise AttributeError("shape of the provided result array "
+                                 + C.shape.__str__()
+                                 + " does not match intended result "
+                                + (m,l).__str__())
+        if C.dtype != dtype:
+            raise TypeError("Result array C provided must have "
+                            "the same dtype as inputs")
+    
     conjA = False
     conjB = False
     conjC = False
@@ -100,70 +131,137 @@ def dot(A, B, opa = 'n', opb = 'n', C = None, Cstart = None):
     
     if m == 1:
         if n == 1:
+            #alpha = A.get()[0,0]
+            #cuda.memcpy_dtod(int(C.gpudata) + Cstart * itemsize, 
+            #                 B.gpudata, l*dtype.itemsize)
+            #if opa in ['c','C']:
+            #    alpha = np.conj(alpha)
+            #if opb in ['c', 'C']:
+            #    C.conj()
+            #func = (tp+"scal(l, alpha*scale, int(C.gpudata) + "
+            #        "Cstart * itemsize, 1)")
             alpha = A.get()[0,0]
-            cuda.memcpy_dtod(int(C.gpudata) + Cstart * itemsize , B.gpudata, l*dtype.itemsize)
             if opa in ['c','C']:
                 alpha = np.conj(alpha)
-            if opb in ['c', 'C']:
-                C.conj()
-            
-            func = tp+"scal(l, alpha, int(C.gpudata) + Cstart * itemsize, 1)"
+            C*=Cscale
+            if opb in ['c','C']:
+                func = (tp+"axpy(l, alpha*scale, parray.conj(B).gpudata, 1,"
+                        + "int(C.gpudata)+Cstart*itemsize, 1)")
+            else:
+                func = (tp+"axpy(l, alpha*scale, B.gpudata, 1, "
+                        + "int(C.gpudata)+Cstart*itemsize, 1)")
         else:
             if l > 1:
-                alpha = 1.0
-                beta = 0.0
+                alpha = scale
+                beta = Cscale
                 if opa in ['c','C']:
                     A.conj()
                     conjA = True
-
-                func = tp+"gemv('"+opb+"',B.shape[1], B.shape[0], alpha, B.gpudata, B.ld, A.gpudata, 1, beta, int(C.gpudata) + Cstart * itemsize * C.ld, 1)"
+                func = (tp+"gemv('"+opb+"',B.shape[1], B.shape[0], "
+                        + "alpha, B.gpudata, B.ld, A.gpudata, 1, beta, "
+                        + "int(C.gpudata) + Cstart * itemsize * C.ld, 1)")
             else:
                 if opa in ['c','C']:
                     if opb in ['c', 'C']:
-                        func = "C.set(np.array(" + tp + "dotu(n, A.gpudata, 1, B.gpudata, 1)" +").conj())"
+                        #func = ("C.set(np.array(" + tp
+                        #        + "dotu(n, A.gpudata, 1, B.gpudata, 1)"
+                        #        +").conj())")
+                        func = ("C.set(np.array(scale*" + tp
+                                + "dotu(n, A.gpudata, 1, B.gpudata, 1)"
+                                +").conj()+C.get()*Cscale)")
                     else:
-                        func = "C.set(np.array(" + tp + "dotc(n, A.gpudata, 1, B.gpudata, 1)" +"))"
+                        #func = ("C.set(np.array(" + tp
+                        #        + "dotc(n, A.gpudata, 1, B.gpudata, 1)"
+                        #        +"))")
+                        func = ("C.set(np.array(scale*" + tp
+                                + "dotc(n, A.gpudata, 1, B.gpudata, 1)"
+                                +") + C.get()*Cscale)")
                 elif opb in ['c', 'C']:
-                    func = "C.set(np.array(" + tp + "dotc(n, B.gpudata, 1, A.gpudata, 1)" +"))"
+                    #func = ("C.set(np.array(" + tp
+                    #        + "dotc(n, B.gpudata, 1, A.gpudata, 1)" +"))")
+                    func = ("C.set(np.array(scale*" + tp
+                            + "dotc(n, B.gpudata, 1, A.gpudata, 1)"
+                            +") + C.get()*Cscale)")
                 else:
                     if complex_type:
-                        func = "C.set(np.array(" + tp + "dotu(n, A.gpudata, 1, B.gpudata, 1)" +"))"
+                        #func = ("C.set(np.array(" + tp
+                        #        + "dotu(n, A.gpudata, 1, B.gpudata, 1)"
+                        #        +"))")
+                        func = ("C.set(np.array(scale*" + tp
+                                + "dotu(n, A.gpudata, 1, B.gpudata, 1)"
+                                +") + C.get()*Cscale)")
                     else:
-                        func = "C.set(np.array(" + tp + "dot(n, A.gpudata, 1, B.gpudata, 1)" +"))"
+                        #func = ("C.set(np.array(" + tp
+                        #        + "dot(n, A.gpudata, 1, B.gpudata, 1)"
+                        #        +"))")
+                        func = ("C.set(np.array(scale*" + tp
+                                + "dot(n, A.gpudata, 1, B.gpudata, 1)"
+                                +") + C.get()*Cscale)")
     else:#m!=1
         if n == 1:
             if l == 1:
+                #alpha = B.get()[0,0]
+                #cuda.memcpy_dtod(int(C.gpudata) + Cstart * itemsize, 
+                #                 A.gpudata, m*dtype.itemsize)
+                #if opa in ['c','C']:
+                #    alpha = np.conj(alpha)
+                #if opb in ['c', 'C']:
+                #    C.conj()
+                #func = (tp+"scal(m, alpha, int(C.gpudata) "
+                #        "+ Cstart * itemsize,1)")
                 alpha = B.get()[0,0]
-                cuda.memcpy_dtod(int(C.gpudata) + Cstart * itemsize, B.gpudata, l*dtype.itemsize)
-                if opa in ['c','C']:
+                if opb in ['c','C']:
                     alpha = np.conj(alpha)
-                if opb in ['c', 'C']:
-                    C.conj()
-                func = tp+"scal(l, alpha, int(C.gpudata) + Cstart * itemsize,1)"
+                C*=Cscale
+                if opa in ['c','C']:
+                    func = (tp+"axpy(m, alpha*scale, "
+                            + "parray.conj(A).gpudata, 1, "
+                            + "int(C.gpudata)+Cstart*itemsize, 1)")
+                else:
+                    func = (tp+"axpy(m, alpha*scale, A.gpudata, 1, "
+                            + "int(C.gpudata)+Cstart*itemsize, 1)")
             else:
-                C.fill(0)
+                #C.fill(0)
+                C*=Cscale
                 if opa in ['c','C']:
                     if opb in ['c', 'C']:
                         B.conj()
                         conjB = True
-                        func =tp + "gerc(l, m, 1.0, B.gpudata, 1, A.gpudata, 1, int(C.gpudata) + Cstart * itemsize * C.ld, C.ld)"
+                        print l, m, scale, C.shape
+                        func = (tp + "gerc(l, m, scale, B.gpudata, 1, "
+                                + "A.gpudata, 1, int(C.gpudata) + "
+                                + "Cstart * itemsize * C.ld, C.ld)")
                     else:
-                        func = tp + "gerc(l, m, 1.0, B.gpudata, 1, A.gpudata, 1, int(C.gpudata) + Cstart * itemsize * C.ld, C.ld)"
+                        func = (tp + "gerc(l, m, scale, B.gpudata, 1, "
+                                + "A.gpudata, 1, int(C.gpudata) + "
+                                + "Cstart * itemsize * C.ld, C.ld)")
                 elif opb in ['c', 'C']:
                     B.conj()
                     conjB = True
-                    func =tp + "geru(l, m, 1.0, B.gpudata, 1, A.gpudata, 1, int(C.gpudata) + Cstart * itemsize * C.ld, C.ld)"
+                    func = (tp + "geru(l, m, scale, B.gpudata, 1, "
+                            + "A.gpudata, 1, int(C.gpudata) + "
+                            + "Cstart * itemsize * C.ld, C.ld)")
                 else:
                     if complex_type:
-                        func = tp + "geru(l, m, 1.0, B.gpudata, 1, A.gpudata, 1, int(C.gpudata) + Cstart * itemsize * C.ld, C.ld)" 
+                        func = (tp + "geru(l, m, scale, B.gpudata, 1, "
+                                + "A.gpudata, 1, int(C.gpudata) + "
+                                + "Cstart * itemsize * C.ld, C.ld)")
                     else:
-                        func = tp + "ger(l, m, 1.0, B.gpudata, 1, A.gpudata, 1, int(C.gpudata) + Cstart * itemsize * C.ld, C.ld)" 
+                        func = (tp + "ger(l, m, scale, B.gpudata, 1, "
+                                + "A.gpudata, 1, int(C.gpudata) + "
+                                + "Cstart * itemsize * C.ld, C.ld)")
         else:
             if l == 1:
                 if opb in ['c', 'C']:
                     if opa in ['c', 'C']:
                         conjC = True
-                        func = tp + "gemv('n', A.shape[1], A.shape[0], 1.0, A.gpudata, A.ld, B.gpudata, 1, 0.0, int(C.gpudata) + Cstart * itemsize * C.ld, 1)"
+                        if not Cempty:
+                            C.conj()
+                            Cscale = Cscale.conj()
+                        func = (tp + "gemv('n', A.shape[1], A.shape[0], "
+                                + "scale, A.gpudata, A.ld, B.gpudata, 1, "
+                                + "Cscale, int(C.gpudata) + "
+                                + "Cstart * itemsize * C.ld, 1)")
                     else:
                         B.conj()
                         conjB = True
@@ -172,32 +270,39 @@ def dot(A, B, opa = 'n', opb = 'n', C = None, Cstart = None):
                         else:
                             opa = 't'
                         
-                        func = tp + "gemv('" + opa + "', A.shape[1], A.shape[0], 1.0, A.gpudata, A.ld, B.gpudata, 1, 0.0, int(C.gpudata) + Cstart * itemsize * C.ld, 1)"
-                        
+                        func = (tp + "gemv('" + opa + "', A.shape[1], "
+                                + "A.shape[0], scale, A.gpudata, A.ld, "
+                                + "B.gpudata, 1, Cscale, int(C.gpudata) + "
+                                + "Cstart * itemsize * C.ld, 1)")
                 else:
                     if opa in ['c', 'C']:
                         B.conj()
                         conjB = True
                         conjC = True
-                        func = tp + "gemv('n', A.shape[1], A.shape[0], 1.0, A.gpudata, A.ld, B.gpudata, 1, 0.0, int(C.gpudata) + Cstart * itemsize * C.ld, 1)"
+                        if not Cempty:
+                            C.conj()
+                            Cscale = Cscale.conj()
+                        func = (tp + "gemv('n', A.shape[1], A.shape[0], "
+                                + "scale, A.gpudata, A.ld, B.gpudata, 1, "
+                                + "Cscale, int(C.gpudata) + "
+                                + "Cstart * itemsize * C.ld, 1)")
                     else:
                         if opa in ['t', 'T']:
                             opa = 'n'
                         else:
-                            opa = 't'
-                        
-                        func = tp + "gemv('" + opa + "', A.shape[1], A.shape[0], 1.0, A.gpudata, A.ld, B.gpudata, 1, 0.0, int(C.gpudata) + Cstart * itemsize * C.ld, 1)"
+                            opa = 't' 
+                        func = (tp + "gemv('" + opa + "', A.shape[1], "
+                                + "A.shape[0], scale, A.gpudata, A.ld, "
+                                + "B.gpudata, 1, Cscale, int(C.gpudata) "
+                                + "+ Cstart * itemsize * C.ld, 1)")
             else:
-                func = tp+"gemm('" + opb + "','" + opa + "', l, m, k, 1.0, B.gpudata, B.ld, A.gpudata, A.ld, 0.0, int(C.gpudata) + Cstart * itemsize * C.ld, C.ld)"
-         
-
-        
-    try:
-        eval(func)
-    except cublas.cublasNotInitialized:
+                func = (tp+"gemm('" + opb + "','" + opa + "', l, m, k, "
+                        + "scale, B.gpudata, B.ld, A.gpudata, A.ld, "
+                        + "Cscale, int(C.gpudata) + "
+                        + "Cstart * itemsize * C.ld, C.ld)")
+    if cublas._libcublas_ctx is None:
         cublas.cublasInit()
-        eval(func)
-
+    eval(func)
     
     if conjC:
         C.conj()
@@ -207,7 +312,6 @@ def dot(A, B, opa = 'n', opb = 'n', C = None, Cstart = None):
 
     if conjB:
         B.conj()
-    
     return C
         
 
