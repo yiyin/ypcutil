@@ -7,8 +7,6 @@ try:
 except ImportError:
     cudaflag = False
     
-    
-    
 def func_timer(f):
     """Time the execution of function f. If arguments are specified,
     they are passed to the function being timed."""
