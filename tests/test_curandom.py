@@ -1,5 +1,5 @@
-from importcuda import *
-import curand as cr
+from ypcutil.importcuda import *
+import ypcutil.curand as cr
 from pycuda.compiler import SourceModule
 
 M = 1600

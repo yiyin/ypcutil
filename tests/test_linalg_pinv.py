@@ -1,5 +1,5 @@
-from importcuda import *
-import linalg as sl
+from ypcutil.importcuda import *
+import ypcutil.linalg as sl
 
 G=np.random.rand(200,100)
 d_G = parray.to_gpu(G)

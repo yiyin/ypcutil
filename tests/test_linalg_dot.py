@@ -1,5 +1,5 @@
-from importcuda import *
-import linalg as sl
+from ypcutil.importcuda import *
+import ypcutil.linalg as sl
 import scikits.cuda.cublas as cublas
 
 print "test 1"
