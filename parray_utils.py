@@ -8,8 +8,6 @@ from pycuda.tools import dtype_to_ctype
 from kernel_utils import func_compile
 
 
-
-
 def get_fill_function(dtype, pitch = True):
     type_dst = dtype_to_ctype(dtype)
     name = "fill"
@@ -418,6 +416,83 @@ def get_scalardiv_function(src_type, pitch = True):
     return func
 
 
+def get_complex_function(real_type, imag_type, result_type, pitch = True):
+    type_real = dtype_to_ctype(real_type)
+    type_imag = dtype_to_ctype(imag_type)
+    type_result = dtype_to_ctype(result_type)
+    
+    name = "makecomplex"
+    
+    if pitch:
+        func = func_compile(name, pitch_complex_template % {
+                "name": name,
+                "real_type": type_real,
+                "imag_type": type_imag,
+                "result_type": type_result
+                })
+        func.prepare([np.int32, np.int32, np.intp, np.int32, np.intp, np.intp, np.int32])
+    else:
+        func = func_compile(name, non_pitch_complex_template % {
+                "name": name,
+                "real_type": type_real,
+                "imag_type": type_imag,
+                "result_type": type_result
+                })
+        func.prepare([np.intp, np.intp, np.intp, np.int32])
+    return func
+    
+
+pitch_complex_template = """
+#include <pycuda/pycuda-complex.hpp>
+#include <cuComplex.h>
+
+__global__ void %(name)s(const int M, const int N, %(result_type)s *odata, const int ldo, const %(real_type)s *real, const %(imag_type)s *image, const int ldi)
+{
+    //M is the number of rows, N is the number of columns
+    const int tid = threadIdx.x;
+    const int sid = threadIdx.y + blockDim.y * blockIdx.x;
+    const int total = gridDim.x * blockDim.y;
+
+    int m, n, idx;
+    %(result_type)s tmp;
+    int segment_per_row = ((N - 1) >> 5) + 1;
+    int total_segments = M * segment_per_row;
+    
+    for(int i = sid; i < total_segments; i+=total)
+    {
+        m = i / segment_per_row;
+        n = i %% segment_per_row;
+        idx = (n<<5) + tid;
+        if(idx < N)
+        {
+            tmp = %(result_type)s(real[m*ldi+idx], imag[m*ldi+idx]);
+            dest[m * ldo + idx] = (tmp);
+        }
+    }
+}
+
+"""
+
+
+non_pitch_complex_template = """
+#include <pycuda/pycuda-complex.hpp>
+#include <cuComplex.h>
+
+__global__ void %(name)s (%(result_type)s *odata, const %(real_type)s *real, const %(imag_type)s *imag, const int N)
+{
+    const int totalthreads = blockDim.x * gridDim.x;
+    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+
+    %(result_type)s tmp;
+
+    for (int i = tid; i < N; i += totalthreads)
+    {
+        tmp = %(result_type)s(real[i], imag[i]);
+        odata[i] = (tmp);
+    }
+}
+
+"""
 
 transpose_template = """
     #include <pycuda/pycuda-complex.hpp>

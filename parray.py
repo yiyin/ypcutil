@@ -14,7 +14,7 @@ import parray_utils as pu
 """ utilities"""
 @memoize
 def _splay_backend(n, M):
-    block_count = 6 * cuda.Context.get_device().MULTIPROCESSOR_COUNT    
+    block_count = 6 * cuda.Context.get_device().MULTIPROCESSOR_COUNT
     if M <= 1:
         block = (256, 1, 1)
     else:
@@ -1525,6 +1525,7 @@ def conj(pary):
     """
     return pary.conj(inplace = False)
 
+
 def reshape(pary, shape):
     """
     Returns reshaped of 2D PitchArray
@@ -1535,4 +1536,77 @@ def reshape(pary, shape):
     pary: PitchArray
     """
     return pary.reshape(shape, inplace = False)
+
+
+def iscomplexobj(pary):
+    """
+    Check if the array dtype is complex
+    """
+    return issubclass(pary.dtype.type, np.complexfloating)
+
+
+def isrealobj(pary):
+    """
+    Check if the array dtype is real
+    """
+    return not iscomplexobj(pary)
+
+
+def complex(real, imag):
+    """
+    Create a complex array using two real arrays
+    
+    Parameters
+    ---------------------------------
+    real: PitchArray
+          The real part
+    imag: PitchArray
+          The imaginary part
+          shape of real and imag must be the same
+    
+    Returns
+    ---------------------------------
+    out: PitchArray
+         The complex array
+    """
+    if isinstance(real, np.ndarray):
+        real = to_gpu(real)
+    if isinstance(imag, np.ndarray):
+        imag = to_gpu(imag)
+    
+    if real.shape != imag.shape:
+        raise ValueError("real and imaginary parts must have the same shape")
+    if iscomplexobj(real) or iscomplexobj(imag):
+        raise TypeError("real and imaginary parts must be real array")
+    dtype = _get_common_dtype(real, imag)
+    if dtype in [np.int32, np.float32]:
+        dtype = np.complex64
+    elif dtype in [np.int64, np.float64]:
+        dtype = np.complex128
+    else:
+        dtype = np.complex64
+    
+    result = empty(real.shape, dtype)
+    if result.size:
+        if result.M == 1:
+            func = pu.get_complex_function(
+                real.dtype, imag.dtype, dtype, pitch = False)
+            func.prepared_call(
+                result._grid, result._block, result.gpudata,
+                real.gpudata, imag.gpudata, result.size)
+        else:
+            func = pu.get_complex_function(
+                real.dtype, imag.dtype, dtype)
+            func.prepared_call(
+                result._grid, result._block, result.M, result.N,
+                result.gpudata, result.ld, real.gpudata, imag.gpudata,
+                real.ld)
+    return result
+
+
+
+
+
+
+
 
