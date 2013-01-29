@@ -675,6 +675,16 @@ def eig_sym(G, compute_z = True, uplo = 'U'):
         return D
     
 
+def add_eye(A, scale):
+    if A.shape[0] != A.shape[1]:
+        raise ValueError("A must be square matrix")
+    func = get_add_eye_func(A.dtype)
+    func.prepared_call(
+        (6 * cuda.Context.get_device().MULTIPROCESSOR_COUNT, 1),
+        (256,1,1), A.gpudata, A.ld, scale, A.shape[0])
+    return A
+
+
 def FISTA_l2(A, b, L = 1, steps=5000):
     import time
     
@@ -1029,3 +1039,27 @@ svinv_Kernel(%(types)s* d_S, %(typev)s* d_V, int ld,
     func.prepare([np.intp, np.intp, np.int32, np.int32,
                  np.double if dtype_s == np.double else np.float32])
     return func
+
+
+def get_add_eye_func(dtype):
+    template = """
+__global__ void adddiag(%(type)s* A, int ld, %(type)s value, int N)
+{
+    int tid = threadIdx.x + blockIdx.x * blockDim.x;
+    int total_threads = blockDim.x * gridDim.x;
+
+    for(int i = tid; i < N; i+=total_threads)                                 
+    {
+        A[tid * ld + tid] += value;
+    }
+}
+
+    """
+    mod = SourceModule(template % {"type": dtype_to_ctype(dtype)})
+    func = mod.get_function("adddiag")
+    func.prepare(
+        [np.intp, np.int32,
+        dtype.type if isinstance(dtype, np.dtype) else dtype,
+        np.int32])
+    return func
+
