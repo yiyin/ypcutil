@@ -1351,7 +1351,7 @@ class PitchArray(object):
         else:
             raise ValueError("non-slice indexing not supported: %s" % (idx,))
         
-        maxshape = self.shape[1] if self.M == 1 else self.shape[0]
+        maxshape = self.size if self.M == 1 else self.shape[0]
         if stop > maxshape:
             stop = maxshape
             from warnings import warn
@@ -1359,7 +1359,11 @@ class PitchArray(object):
                  "reduce to allowed size")
 
         if self.M == 1:
-            return PitchArray(shape=(1,stop-start), dtype = self.dtype,
+            if self.shape[0] == 1:
+                shape = (1,stop-start)
+            else:
+                shape = (stop-start,1)
+            return PitchArray(shape=shape, dtype = self.dtype,
                               gpudata = int(self.gpudata) +
                                     start*self.dtype.itemsize,
                               base = self)
