@@ -1556,6 +1556,17 @@ def isrealobj(pary):
     """
     return not iscomplexobj(pary)
 
+def floattocomplex(dtype):
+    if issubclass(dtype, np.complexfloating):
+        outdtype = dtype
+    elif dtype == np.float32:
+        outdtype = np.complex64
+    elif dtype == np.float64:
+        outdtype = np.complex128
+    else:
+        raise TypeError("input dtype " + str(A.dtype)
+                        " cannot be translated to complex floating")
+    return outdtype
 
 def complex(real, imag):
     """
