@@ -1568,6 +1568,18 @@ def floattocomplex(dtype):
                         " cannot be translated to complex floating")
     return outdtype
 
+def complextofloat(dtype):
+    if not issubclass(dtype, np.complexfloating):
+        outdtype = dtype
+    elif dtype == np.complex64:
+        outdtype = np.float32
+    elif dtype == np.complex128:
+        outdtype = np.float64
+    else:
+        raise TypeError("input dtype " + str(A.dtype)
+                        " cannot be translated to floating")
+    return outdtype
+
 def complex(real, imag):
     """
     Create a complex array using two real arrays
