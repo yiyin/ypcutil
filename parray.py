@@ -226,9 +226,9 @@ class PitchArray(object):
         
         if self.size:
             if self.M == 1:
-                cuda.memcpy_htod(self.gpudata, ary)
+                cuda.memcpy_htod(int(self.gpudata), ary)
             else:
-                PitchTrans(self.shape, self.gpudata, 
+                PitchTrans(self.shape, int(self.gpudata), 
                            self.ld, ary, _pd(self.shape), self.dtype)
     
     def set_async(self, ary, stream=None):
@@ -253,9 +253,9 @@ class PitchArray(object):
                 
         if self.size:
             if self.M == 1:
-                cuda.memcpy_htod_async(self.gpudata, ary, stream)
+                cuda.memcpy_htod_async(int(self.gpudata), ary, stream)
             else:
-                PitchTrans(self.shape, self.gpudata, self.ld, ary,
+                PitchTrans(self.shape, int(self.gpudata), self.ld, ary,
                            _pd(self.shape), self.dtype, async = True,
                            stream = stream)
 
@@ -284,10 +284,10 @@ class PitchArray(object):
         
         if self.size:
             if self.M == 1:
-                cuda.memcpy_dtoh(ary, self.gpudata)
+                cuda.memcpy_dtoh(ary, int(self.gpudata))
             else:
                 PitchTrans(self.shape, ary, _pd(self.shape),
-                           self.gpudata, self.ld, self.dtype)
+                           int(self.gpudata), self.ld, self.dtype)
                 
         return ary
 
@@ -317,10 +317,11 @@ class PitchArray(object):
         
         if self.size:
             if self.M == 1:
-                cuda.memcpy_dtoh_async(ary, self.gpudata, stream)
+                cuda.memcpy_dtoh_async(ary, int(self.gpudata), stream)
             else:
-                PitchTrans(self.shape, ary, _pd(self.shape), self.gpudata,
-                           self.ld, self.dtype, async = True, stream = stream)
+                PitchTrans(self.shape, ary, _pd(self.shape),
+                           int(self.gpudata), self.ld, self.dtype,
+                           async = True, stream = stream)
                 
         return ary
 
@@ -1268,7 +1269,7 @@ class PitchArray(object):
         elif nrows == 1:
             cuda.memcpy_dtod(
                 result.gpudata,
-                int(self.gpudata) + start*self.ld*self.dtype.itemsize,
+                int(int(self.gpudata) + start*self.ld*self.dtype.itemsize),
                 self.dtype.itemsize * _pd(shape))
         return result
     
@@ -1364,22 +1365,22 @@ class PitchArray(object):
             else:
                 shape = (stop-start,1)
             return PitchArray(shape=shape, dtype = self.dtype,
-                              gpudata = int(self.gpudata) +
-                                    start*self.dtype.itemsize,
+                              gpudata = int(int(self.gpudata) +
+                                    start*self.dtype.itemsize),
                               base = self)
         else:
             if self.ndim == 2:
                 return PitchArray(shape=(stop-start,self.shape[1]),
                                   dtype = self.dtype,
-                                  gpudata = int(self.gpudata) +
-                                        start*self.dtype.itemsize*self.ld,
+                                  gpudata = int(int(self.gpudata) +
+                                        start*self.dtype.itemsize*self.ld),
                                   base = self)
             else:
                 return PitchArray(shape=(stop-start,self.shape[1],
                                           self.shape[2]),
                                   dtype = self.dtype,
-                                  gpudata = int(self.gpudata) +
-                                        start*self.dtype.itemsize*self.ld,
+                                  gpudata = int(int(self.gpudata) +
+                                        start*self.dtype.itemsize*self.ld),
                                   base = self)
         
 
