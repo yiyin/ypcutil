@@ -1154,8 +1154,14 @@ class PitchArray(object):
                                   dtype = self.dtype,
                                   gpudata = int(self.gpudata),
                                   base = self)
-            else:
-                raise ValueError("cannot resize inplacely")
+            else:# The case when self is a vector
+                if self.M == 1 and any(b == 1 for b in shape):
+                    return PitchArray(shape = shape,
+                                      dtype = self.dtype,
+                                      gpudata = int(self.gpudata),
+                                      base = self)
+                else:
+                    raise ValueError("cannot resize inplacely")
 
         
         result = PitchArray(shape, self.dtype)
