@@ -17,6 +17,35 @@ class fftplan(object):
     """
     def __init__(self, shape, dtype, in_ld, out_ld,
                  forward = True, econ = False, batch_size = 1):
+        """
+        Initialize fft plan.
+        
+        Parameters
+        ----------
+        shape : int or tuple or list
+            The size of the fft in each dimension.
+            The last dimension will be the leading dimension in the arrays.
+        dtype : numpy.dtype
+            The dtype of input array
+        in_ld : int
+            The amount of elements in memory between
+            consecutive batches in the input data.
+        out_ld : int
+            The amount of elements in memory between
+            consecutive batches in the output data.
+        forward : bool, optional
+            True if forward fft
+            False if inverse fft
+        econ : bool, optional
+            For foward transform, when input is real,
+            whether the output is stored in econ fashion,
+            i.e. only half of the fft results will be returned.
+            For inverse transform,
+            whether the input is stored in econ fashion,
+            if True, output ifft result will be real.
+        batch_size : int
+            The amount of batches in one transform call.
+        """
         self.shape = (shape,) if isinstance(shape, int) else shape
         self.ndim = 1 if isinstance(shape, int) else len(shape)
         self.dtype = dtype.type if isinstance(dtype, np.dtype) else dtype
@@ -31,9 +60,23 @@ class fftplan(object):
         self.create_plan(self.batch_size)
         
     def transform(self, d_in, d_out):
+        """
+        Perform fft or ifft transform on d_in, 
+        and store the result in d_out,
+        according to specified plan.
+        
+        Parameters
+        ----------
+        d_in : parray.PitchArray
+            The input array.
+        d_out : parray.PitchArray
+            The output array.
+        """
         assert d_in.dtype == self.intype
         assert d_out.dtype == self.outtype
-        
+        # TODO: check if d_in and d_out is the same,
+        # if they are the same, check if in_ld, is larger than prod(shape)
+        # to avoid error
         if self.fftdir is None:
             self.fftfunc(self.plan, int(d_in.gpudata), int(d_out.gpudata))
         else:
@@ -45,6 +88,9 @@ class fftplan(object):
             self.destroy_plan()
         
     def setup_dim(self):
+        """
+        Setup the dimensions of the fft.
+        """
         self.n = np.asarray(self.shape ,np.int32)
         if self.forward:
             self.inembed = np.asarray(self.shape, np.int32)
@@ -58,10 +104,21 @@ class fftplan(object):
                 self.inembed[-1] = self.inembed[-1]/2+1
         
     def destroy_plan(self):
+        """
+        Destroy the plan.
+        """
         cufft.cufftDestroy(self.plan)
         self.planned = False
 
     def create_plan(self, batch_size):
+        """
+        Create the fft plan, with specified batch_size.
+        
+        Parameters
+        ----------
+        batch_size : int
+            The number of batches to be transformed together.
+        """
         self.plan = cufft.cufftPlanMany(
             self.ndim, self.n.ctypes.data,
             self.inembed.ctypes.data, 1, self.in_ld,
@@ -70,6 +127,24 @@ class fftplan(object):
         self.planned = True
 
     def gettypes(self):
+        """
+        Obtain the input, output array type,
+        and the fft type, function and direction
+        according to the parameters set in initialization
+        
+        Returns
+        -------
+        intype : numpy.dtype
+            Dtype of the input array.
+        outtype : numpy.dtype
+            Dtype of the output array.
+        ffttype : cufft transform types
+        fftfunc : function
+            The cufftExecx2x function to be executed in transform.
+        fftdir : The direction of fft
+            None is either input or output is real (can be inferred).
+            Otherwise, the direction of complex to complex transform.
+        """
         dtype = self.dtype
         forward = self.forward
         econ = self.econ
@@ -123,8 +198,22 @@ class fftplan(object):
     
 def fft(d_A, econ = False):
     """
+    Perform 1D fft on each row of d_A
     can accept only 2D array
-    1D FFT for each row
+    
+    Parameters
+    ----------
+    d_A : parray.PitchArray
+        Input array, complex or real
+    econ : bool, optional
+        Only applies when d_A is real
+        If True, the output only contains half of the fft result,
+        the other half can be inferred.
+    
+    Returns
+    -------
+    out : parray.PitchArray, complex
+        Each row containing the fft of corresponding to the input row.
     """
     assert len(d_A.shape) <= 2
     A = d_A
@@ -164,6 +253,10 @@ def fft(d_A, econ = False):
             (6*cuda.Context.get_device().MULTIPROCESSOR_COUNT, 1),
             (256, 1, 1), d_output.gpudata, d_output.ld,
             size, total_inputs)
+    if econ and not realA:
+        print ("Warning ypcutil.fft.fft: "
+               "requested econ outputs, but getting complex inputs. "
+               "econ is neglected")
     return d_output.reshape(d_A.shape) if reshaped else d_output
 
 def ifft(d_A, econ = False, even_size = None,
@@ -195,7 +288,7 @@ def ifft(d_A, econ = False, even_size = None,
         
     Returns
     -------
-    out : parray.PitchArray, complex
+    out : parray.PitchArray
         If econ is True, returns real array
         Otherwise, returns complex array.
     """
