@@ -1556,6 +1556,17 @@ def isrealobj(pary):
     """
     return not iscomplexobj(pary)
 
+
+def issingle(dtype):
+    if dtype in [np.float32, np.complex64]:
+        return True
+    elif dtype in [np.float64, np.complex128]:
+        return False
+    else:
+        raise TypeError("input dtype " + str(dtype) +
+                        "not understood")
+        
+
 def floattocomplex(dtype):
     if issubclass(dtype, np.complexfloating):
         outdtype = dtype
@@ -1564,9 +1575,10 @@ def floattocomplex(dtype):
     elif dtype == np.float64:
         outdtype = np.complex128
     else:
-        raise TypeError("input dtype " + str(A.dtype)
+        raise TypeError("input dtype " + str(dtype) +
                         " cannot be translated to complex floating")
     return outdtype
+
 
 def complextofloat(dtype):
     if not issubclass(dtype, np.complexfloating):
@@ -1576,7 +1588,7 @@ def complextofloat(dtype):
     elif dtype == np.complex128:
         outdtype = np.float64
     else:
-        raise TypeError("input dtype " + str(A.dtype)
+        raise TypeError("input dtype " + str(dtype) +
                         " cannot be translated to floating")
     return outdtype
 
