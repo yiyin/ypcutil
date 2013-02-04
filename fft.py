@@ -291,11 +291,12 @@ def fft(d_A, econ = False):
                "econ is neglected")
     return d_output.reshape(d_A.shape) if reshaped else d_output
 
+
 def ifft(d_A, econ = False, even_size = None,
          scale = True, scalevalue = None):
     """
     Perform 1D inverse fft on each row of d_A
-    can accept only 2D array
+    can accept only 2D array, may be vector
     
     Parameters
     ----------
@@ -351,7 +352,8 @@ def ifft(d_A, econ = False, even_size = None,
     d_output = parray.empty((total_inputs, size), outdtype)
     
     batch_size = min(total_inputs, 128)
-    # TODO: check if d_output.ld is correct for vectors
+    # Even for vectors d_output is alway of shape (1, size),
+    # so d_output.ld should be correct
     plan = fftplan(size, A.dtype, A.ld, d_output.ld,
                  forward = False, econ = econ,
                  batch_size = batch_size)
@@ -371,8 +373,58 @@ def ifft(d_A, econ = False, even_size = None,
         d_output *= scalevalue
     return d_output.reshape(d_A.shape) if reshaped else d_output
 
+
 def fft2(d_A, econ = False):
-    pass
+    """
+    
+    """
+    ndim = len(d_A.shape)
+    if ndim == 2:
+        total_inputs = 1
+        size = d_A.shape
+        outdim = 2
+    elif ndim == 3:
+        total_inputs = d_A.shape[0]
+        size = d_A.shape[1:3]
+        outdim = 3
+    realA = parray.isrealobj(A)
+    
+    outdtype = parray.floattocomplex(A.dtype)
+    outshape = [b for b in d_A.shape]
+    if econ:
+        outshape[-1] = outshape[-1]/2+1
+    d_output = parray.empty(outshape, outdtype)
+    batch_size = min(total_inputs, 128)
+    
+    plan = fftplan(
+        size, d_A.dtype, d_A.ld, d_output.ld, forward = True, econ = realA,
+        batch_size = batch_size, 
+        inembed = (d_A.shape[0], A.ld) if outdim == 2 else None,
+        onembed = (d_output.shape[0], d_output.ld) if outdim == 2 else None)
+    for i in range(0, total_inputs, batch_size):
+        ntransform = min(batch_size, total_inputs-i)
+        if ntransform != batch_size:
+            del plan
+            plan = fftplan(
+                size, d_A.dtype, d_A.ld, d_output.ld, forward = True,
+                econ = realA, batch_size = ntransform, 
+                inembed = (d_A.shape[0], A.ld) if outdim == 2 else None,
+                onembed = ((d_output.shape[0], d_output.ld)
+                            if outdim == 2 else None)
+        plan.transform(A[i:i+ntransform], d_output[i:i+ntransform])
+    del plan
+    if realA and not econ:
+        pad_func = get_2d_pad_func(outdtype)
+        pad_func.prepared_call(
+            (6*cuda.Context.get_device().MULTIPROCESSOR_COUNT, 1),
+            (256, 1, 1), d_output.gpudata, d_output.ld,
+            size, total_inputs)
+    if econ and not realA:
+        print ("Warning ypcutil.fft.fft: "
+               "requested econ outputs, but getting complex inputs. "
+               "econ is neglected")
+    return d_output
+        
 
 def ifft2(A):
     pass
@@ -438,5 +490,45 @@ get_1d_pad_kernel(%(type)s* input, int ld, int fftsize, int batch)
     #block = (256, 1, 1)
     #Used 19 registers, 52 bytes cmem[0], 168 bytes cmem[2]
     return func
-    
 
+
+def get_2d_pad_func(dtype, ndim):
+    """
+    Assumes that the array is already allocated and the half of
+    the entry is filled with half of the fft results
+    """
+    if ndim == 3:
+        template = """
+#include <pycuda/pycuda-complex.hpp>
+__global__ void
+get_2d_pad_kernel(%(type)s* input, int ld, int fftsize_x, int fftsize_y, int batch)
+{
+    int tid = threadIdx.x + blockIdx.x * blockDim.x;
+    int total_threads = blockDim.x * gridDim.x;
+    int entry_per_row = (fftsize>>1);
+    int total_entry = entry_per_row*batch;
+    int row, col;
+    
+    for(int i = tid; i < total_entry; i += total_threads)
+    {
+        row = i / entry_per_row;
+        col = i %% entry_per_row;
+        input[row*ld + fftsize-col-1] = conj(input[row*ld + col+1]);
+    }
+}
+
+        """
+    elif ndim == 2:
+        template = """
+    
+        """
+    else:
+        raise ValueError("Wrong ndim to get_2d_pad_func. ndim = " + str(ndim))
+    mod = SourceModule(template % {"type": dtype_to_ctype(dtype)},
+                       options = ["--ptxas-options=-v"])
+    func = mod.get_function('get_2d_pad_kernel')
+    func.prepare([np.intp, np.int32, np.int32, np.int32])
+    #grid = (6*cuda.Context.get_device().MULTIPROCESSOR_COUNT, 1)    
+    #block = (256, 1, 1)
+    #Used 19 registers, 52 bytes cmem[0], 168 bytes cmem[2]
+    return func
