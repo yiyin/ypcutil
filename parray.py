@@ -1568,6 +1568,7 @@ def issingle(dtype):
         
 
 def floattocomplex(dtype):
+    dtype = dtype.type if isinstance(dtype, np.dtype) else dtype
     if issubclass(dtype, np.complexfloating):
         outdtype = dtype
     elif dtype == np.float32:
@@ -1581,6 +1582,7 @@ def floattocomplex(dtype):
 
 
 def complextofloat(dtype):
+    dtype = dtype.type if isinstance(dtype, np.dtype) else dtype
     if not issubclass(dtype, np.complexfloating):
         outdtype = dtype
     elif dtype == np.complex64:
