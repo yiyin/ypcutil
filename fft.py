@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 
-import numpy as np
+import pdb
 
+import numpy as np
 import pycuda.driver as cuda
 from pycuda.tools import dtype_to_ctype
 from pycuda.compiler import SourceModule
@@ -9,18 +10,20 @@ import scikits.cuda.cufft as cufft
 
 import ypcutil.parray as parray
 
-class cufft(object):
+class fftplan(object):
     """
     This class is to facilitate taking fft
     of the same type for multiple times 
     """
     def __init__(self, shape, dtype, in_ld, out_ld,
                  forward = True, econ = False, batch_size = 1):
-        self.shape = shape
-        self.ndim = len(shape)
+        self.shape = (shape,) if isinstance(shape, int) else shape
+        self.ndim = 1 if isinstance(shape, int) else len(shape)
+        self.dtype = dtype.type if isinstance(dtype, np.dtype) else dtype
         self.forward = forward
         self.in_ld = in_ld
         self.out_ld = out_ld
+        self.econ = econ
         self.batch_size = batch_size
         (self.intype, self.outtype,
          self.ffttype, self.fftfunc, self.fftdir) = self.gettypes()
@@ -34,7 +37,7 @@ class cufft(object):
         if self.fftdir is None:
             self.fftfunc(self.plan, int(d_in.gpudata), int(d_out.gpudata))
         else:
-            self.fftfunc(slef.plan, int(d_in.gpudata),
+            self.fftfunc(self.plan, int(d_in.gpudata),
                          int(d_out.gpudata), self.fftdir)
     
     def __del__(self):
@@ -58,7 +61,7 @@ class cufft(object):
         cufft.cufftDestroy(self.plan)
         self.planned = False
 
-    def create_plan(self, batchsize):
+    def create_plan(self, batch_size):
         self.plan = cufft.cufftPlanMany(
             self.ndim, self.n.ctypes.data,
             self.inembed.ctypes.data, 1, self.in_ld,
@@ -118,7 +121,7 @@ class cufft(object):
         return intype, outtype, ffttype, fftfunc, fftdir
         
     
-def fft(d_A):
+def fft(d_A, econ = False):
     """
     can accept only 2D array
     1D FFT for each row
@@ -133,27 +136,29 @@ def fft(d_A):
             A = d_A.reshape((1, size))
             reshaped = True
     else:
-        total_inputs = shape[0]
+        total_inputs = A.shape[0]
         size = A.shape[1]
+    realA = parray.isrealobj(A)
     
-    outdtype = parray.floattocomplex(A.dtype)        
-    d_output = parray.empty((total_inputs, size), outdtype)
+    outdtype = parray.floattocomplex(A.dtype)
+    d_output = parray.empty((total_inputs, size/2+1 if econ else size),
+                            outdtype)
     
     batch_size = min(total_inputs, 128)
     # TODO: check if d_output.ld is correct for vectors
-    plan = cufft(size, A.dtype, A.ld, d_output.ld,
-                 forward = True, econ = False,
+    plan = fftplan(size, A.dtype, A.ld, d_output.ld,
+                 forward = True, econ = realA,
                  batch_size = batch_size)
     for i in range(0, total_inputs, batch_size):
         ntransform = min(batch_size, total_inputs-i)
         if ntransform != batch_size:
             del plan
-            plan = cufft(size, A.dtype, A.ld, d_output.ld,
-                         forward = True, econ = False,
+            plan = fftplan(size, A.dtype, A.ld, d_output.ld,
+                         forward = True, econ = realA,
                          batch_size = ntransform)
         plan.transform(A[i:i+ntransform], d_output[i:i+ntransform])
     del plan
-    if parray.isrealobj(A):
+    if realA and not econ:
         pad_func = get_1d_pad_func(outdtype)
         pad_func.prepared_call(
             (6*cuda.Context.get_device().MULTIPROCESSOR_COUNT, 1),
@@ -161,11 +166,38 @@ def fft(d_A):
             size, total_inputs)
     return d_output.reshape(d_A.shape) if reshaped else d_output
 
-def ifft(d_A, econ = False, even_size = None):
+def ifft(d_A, econ = False, even_size = None,
+         scale = True, scalevalue = None):
     """
+    Perform 1D inverse fft on each row of d_A
     can accept only 2D array
-    1D Inverse FFT for each row
-    If econ is True, consider the input A has only half of the fft coeff.
+    
+    Parameters
+    ----------
+    d_A : parray.PitchArray
+        Input array, complex
+    econ : bool, optional
+        Whether the dft is stored in econ fashion in d_A.
+    even_size : bool or None, optional
+        Only effects when econ is True.
+        If None, the size of fft is inferred.
+        from element in d_A if d_A is real.
+        If True, size of fft is even, else odd.
+    scale : bool, optional
+        Whether to scale the ifft to true ifft results.
+        If false, the returned ifft is not normalize by N,
+        where N is the size of ifft.
+        If True, the ifft is normalized to be the true idft.
+    scalevalue : float or None, optioinal
+        Only takes effect when scale if True.
+        If None, scale to the default size 1/N.
+        If float, scale by value float.
+        
+    Returns
+    -------
+    out : parray.PitchArray, complex
+        If econ is True, returns real array
+        Otherwise, returns complex array.
     """
     assert len(d_A.shape) <= 2
     A = d_A
@@ -174,7 +206,7 @@ def ifft(d_A, econ = False, even_size = None):
         total_inputs = 1
         if econ:
             if even_size is None:
-                even_size = check_even_econ_1d(a, max(A.shape))
+                even_size = check_even_econ_1d(A, max(A.shape))
             size = (max(A.shape)-1)*2 if even_size else (max(A.shape)-1)*2+1
         else:
             size = max(A.shape)
@@ -185,7 +217,7 @@ def ifft(d_A, econ = False, even_size = None):
         total_inputs = max(A.shape)
         if econ:
             if even_size is None:
-                even_size = check_even_econ_1d(a, A.shape[1])
+                even_size = check_even_econ_1d(A, A.shape[1])
             size = (A.shape[1]-1)*2 if even_size else (A.shape[1]-1)*2+1
         else:
             size = A.shape[1]
@@ -195,18 +227,23 @@ def ifft(d_A, econ = False, even_size = None):
     
     batch_size = min(total_inputs, 128)
     # TODO: check if d_output.ld is correct for vectors
-    plan = cufft(size, A.dtype, A.ld, d_output.ld,
+    plan = fftplan(size, A.dtype, A.ld, d_output.ld,
                  forward = False, econ = econ,
                  batch_size = batch_size)
     for i in range(0, total_inputs, batch_size):
         ntransform = min(batch_size, total_inputs-i)
         if ntransform != batch_size:
             del plan
-            plan = cufft(size, A.dtype, A.ld, d_output.ld,
+            plan = fftplan(size, A.dtype, A.ld, d_output.ld,
                          forward = False, econ = econ,
                          batch_size = ntransform)
         plan.transform(A[i:i+ntransform], d_output[i:i+ntransform])
     del plan
+    
+    if scale:
+        if scalevalue is None:
+            scalevalue = 1./size
+        d_output *= scalevalue
     return d_output.reshape(d_A.shape) if reshaped else d_output
 
 def fft2(A):
@@ -233,6 +270,10 @@ def check_even_econ_1d(A, size):
     out: bool
          True if the size is even, i.e. the last entry of fft is real
          False if the size is odd, i.e. the last entry of fft is complex
+         
+    Note that this assumes 0 error in the forward fft calculation,
+    otherwise, the last entry of reduced storage fft will has very small
+    imaginary part
     """
     a = np.empty(1, A.dtype)
     cuda.memcpy_dtoh(a, int(int(A.gpudata) + A.dtype.itemsize*(size-1)))
@@ -245,8 +286,9 @@ def get_1d_pad_func(dtype):
     the entry is filled with half of the fft results
     """
     template = """
+#include <pycuda/pycuda-complex.hpp>
 __global__ void
-get_1d_pad_kernel(%(type)s input, int ld, int fftsize, int batch)
+get_1d_pad_kernel(%(type)s* input, int ld, int fftsize, int batch)
 {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
     int total_threads = blockDim.x * gridDim.x;
@@ -258,7 +300,7 @@ get_1d_pad_kernel(%(type)s input, int ld, int fftsize, int batch)
     {
         row = i / entry_per_row;
         col = i %% entry_per_row;
-        input[row*ld + fftsize-col] = conj(input[row*ld + col+1]);
+        input[row*ld + fftsize-col-1] = conj(input[row*ld + col+1]);
     }
 }
 
@@ -269,6 +311,7 @@ get_1d_pad_kernel(%(type)s input, int ld, int fftsize, int batch)
     func.prepare([np.intp, np.int32, np.int32, np.int32])
     #grid = (6*cuda.Context.get_device().MULTIPROCESSOR_COUNT, 1)    
     #block = (256, 1, 1)
+    #Used 19 registers, 52 bytes cmem[0], 168 bytes cmem[2]
     return func
     
 
