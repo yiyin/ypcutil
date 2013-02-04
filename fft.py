@@ -15,8 +15,9 @@ class fftplan(object):
     This class is to facilitate taking fft
     of the same type for multiple times 
     """
-    def __init__(self, shape, dtype, in_ld, out_ld,
-                 forward = True, econ = False, batch_size = 1):
+    def __init__(self, shape, dtype, idist, odist,
+                 forward = True, econ = False, batch_size = 1,
+                 inembed = None, onembed = None):
         """
         Initialize fft plan.
         
@@ -27,10 +28,10 @@ class fftplan(object):
             The last dimension will be the leading dimension in the arrays.
         dtype : numpy.dtype
             The dtype of input array
-        in_ld : int
+        idist : int
             The amount of elements in memory between
             consecutive batches in the input data.
-        out_ld : int
+        odist : int
             The amount of elements in memory between
             consecutive batches in the output data.
         forward : bool, optional
@@ -45,18 +46,25 @@ class fftplan(object):
             if True, output ifft result will be real.
         batch_size : int
             The amount of batches in one transform call.
+        inembed : list or tuple of int, optional
+            Specifing the number of elements in each dimension
+            in the input array.
+        onembed : list or tuple of int, optional
+            Specifing the number of elements in each dimension
+            in the output array.
+        See CUFFT user guide
         """
         self.shape = (shape,) if isinstance(shape, int) else shape
-        self.ndim = 1 if isinstance(shape, int) else len(shape)
+        self.ndim = len(self.shape)
         self.dtype = dtype.type if isinstance(dtype, np.dtype) else dtype
         self.forward = forward
-        self.in_ld = in_ld
-        self.out_ld = out_ld
+        self.idist = idist
+        self.odist = odist
         self.econ = econ
         self.batch_size = batch_size
         (self.intype, self.outtype,
          self.ffttype, self.fftfunc, self.fftdir) = self.gettypes()
-        self.setup_dim()
+        self.setup_dim(inembed, onembed)
         self.create_plan(self.batch_size)
         
     def transform(self, d_in, d_out):
@@ -75,7 +83,7 @@ class fftplan(object):
         assert d_in.dtype == self.intype
         assert d_out.dtype == self.outtype
         # TODO: check if d_in and d_out is the same,
-        # if they are the same, check if in_ld, is larger than prod(shape)
+        # if they are the same, check if idist, is larger than prod(shape)
         # to avoid error
         if self.fftdir is None:
             self.fftfunc(self.plan, int(d_in.gpudata), int(d_out.gpudata))
@@ -87,21 +95,45 @@ class fftplan(object):
         if self.planned:
             self.destroy_plan()
         
-    def setup_dim(self):
+    def setup_dim(self, inembed = None, onembed = None):
         """
         Setup the dimensions of the fft.
+        
+        Parameters
+        ----------
+        inembed : list or tuple of int, optional
+            Specifing the number of elements in each dimension
+            in the input array.
+        onembed : list or tuple of int, optional
+            Specifing the number of elements in each dimension
+            in the output array.
+        
+        See CUFFT user guide
         """
         self.n = np.asarray(self.shape ,np.int32)
-        if self.forward:
-            self.inembed = np.asarray(self.shape, np.int32)
-            self.onembed = np.asarray(self.shape ,np.int32)
-            if self.econ:
-                self.onembed[-1] = self.onembed[-1]/2+1
+        
+        if inembed is None:
+            inembed = np.asarray(self.shape, np.int32)
+            if self.econ and not self.forward:
+                inembed[-1] = inembed[-1]/2+1
         else:
-            self.inembed = np.asarray(self.shape, np.int32)
-            self.onembed = np.asarray(self.shape, np.int32)
-            if self.econ:
-                self.inembed[-1] = self.inembed[-1]/2+1
+            if len(inembed) != self.ndim:
+                raise ValueError("size of inembed speicified not correct")
+            else:
+                inembed = np.asarray(inembed, np.int32)
+        
+        if onembed is None:
+            onembed = np.asarray(self.shape, np.int32)
+            if self.econ and self.forward:
+                onembed[-1] = onembed[-1]/2+1
+        else:
+            if len(onembed) != self.ndim:
+                raise ValueError("size of onembed speicified not correct")
+            else:
+                onembed = np.asarray(onembed, np.int32)
+        
+        self.inembed = inembed
+        self.onembed = onembed
         
     def destroy_plan(self):
         """
@@ -121,8 +153,8 @@ class fftplan(object):
         """
         self.plan = cufft.cufftPlanMany(
             self.ndim, self.n.ctypes.data,
-            self.inembed.ctypes.data, 1, self.in_ld,
-            self.onembed.ctypes.data, 1, self.out_ld,
+            self.inembed.ctypes.data, 1, self.idist,
+            self.onembed.ctypes.data, 1, self.odist,
             self.ffttype, batch_size)
         self.planned = True
 
@@ -339,7 +371,7 @@ def ifft(d_A, econ = False, even_size = None,
         d_output *= scalevalue
     return d_output.reshape(d_A.shape) if reshaped else d_output
 
-def fft2(A):
+def fft2(d_A, econ = False):
     pass
 
 def ifft2(A):
