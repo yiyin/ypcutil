@@ -612,25 +612,22 @@ class PitchArray(object):
                         other.ld, self.gpudata, self.ld)
             return result
         else:
-            if other == 1.0:
-                return self.copy()
-            else:
-                result = self._new_like_me()
-                if self.size:
-                    if self.M == 1:
-                        func = pu.get_scalardiv_function(
-                            self.dtype, pitch = False)
-                        func.prepared_call(
-                            self._grid, self._block, result.gpudata,
-                            self.gpudata, other, self.size)
-                    else:
-                        func = pu.get_scalardiv_function(
-                            self.dtype, pitch = True)
-                        func.prepared_call(
-                            self._grid, self._block, self.M, self.N,
-                            result.gpudata, result.ld, self.gpudata,
-                            self.ld, other)
-                return result
+            result = self._new_like_me()
+            if self.size:
+                if self.M == 1:
+                    func = pu.get_scalardiv_function(
+                        self.dtype, pitch = False)
+                    func.prepared_call(
+                        self._grid, self._block, result.gpudata,
+                        self.gpudata, other, self.size)
+                else:
+                    func = pu.get_scalardiv_function(
+                        self.dtype, pitch = True)
+                    func.prepared_call(
+                        self._grid, self._block, self.M, self.N,
+                        result.gpudata, result.ld, self.gpudata,
+                        self.ld, other)
+            return result
 
     def __neg__(self):
         """
