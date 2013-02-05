@@ -261,9 +261,14 @@ def fft(d_A, econ = False):
         size = A.shape[1]
     realA = parray.isrealobj(A)
     
+    if econ and not realA:
+        print ("Warning ypcutil.fft.fft: "
+               "requested econ outputs, but getting complex inputs. "
+               "econ is neglected")
     outdtype = parray.floattocomplex(A.dtype)
-    d_output = parray.empty((total_inputs, size/2+1 if econ else size),
-                            outdtype)
+    d_output = parray.empty(
+        (total_inputs, size/2+1 if econ and realA else size),
+        outdtype)
     
     batch_size = min(total_inputs, 128)
     # TODO: check if d_output.ld is correct for vectors
@@ -285,10 +290,6 @@ def fft(d_A, econ = False):
             (6*cuda.Context.get_device().MULTIPROCESSOR_COUNT, 1),
             (256, 1, 1), d_output.gpudata, d_output.ld,
             size, total_inputs)
-    if econ and not realA:
-        print ("Warning ypcutil.fft.fft: "
-               "requested econ outputs, but getting complex inputs. "
-               "econ is neglected")
     return d_output.reshape(d_A.shape) if reshaped else d_output
 
 
@@ -382,16 +383,19 @@ def fft2(d_A, econ = False):
     if ndim == 2:
         total_inputs = 1
         size = d_A.shape
-        outdim = 2
     elif ndim == 3:
         total_inputs = d_A.shape[0]
         size = d_A.shape[1:3]
-        outdim = 3
-    realA = parray.isrealobj(A)
+    realA = parray.isrealobj(d_A)
     
-    outdtype = parray.floattocomplex(A.dtype)
+    if econ and not realA:
+        print ("Warning ypcutil.fft.fft: "
+               "requested econ outputs, but getting complex inputs. "
+               "econ is neglected")
+    
+    outdtype = parray.floattocomplex(d_A.dtype)
     outshape = [b for b in d_A.shape]
-    if econ:
+    if econ and realA:
         outshape[-1] = outshape[-1]/2+1
     d_output = parray.empty(outshape, outdtype)
     batch_size = min(total_inputs, 128)
@@ -399,8 +403,9 @@ def fft2(d_A, econ = False):
     plan = fftplan(
         size, d_A.dtype, d_A.ld, d_output.ld, forward = True, econ = realA,
         batch_size = batch_size, 
-        inembed = (d_A.shape[0], A.ld) if outdim == 2 else None,
-        onembed = (d_output.shape[0], d_output.ld) if outdim == 2 else None)
+        inembed = (d_A.shape[0], d_A.ld) if ndim == 2 else None,
+        onembed = ((d_output.shape[0], d_output.ld) if
+                       ndim == 2 else (d_output.ld, outshape[-1])))
     for i in range(0, total_inputs, batch_size):
         ntransform = min(batch_size, total_inputs-i)
         if ntransform != batch_size:
@@ -408,21 +413,18 @@ def fft2(d_A, econ = False):
             plan = fftplan(
                 size, d_A.dtype, d_A.ld, d_output.ld, forward = True,
                 econ = realA, batch_size = ntransform, 
-                inembed = (d_A.shape[0], A.ld) if outdim == 2 else None,
-                onembed = ((d_output.shape[0], d_output.ld)
-                            if outdim == 2 else None)
-        plan.transform(A[i:i+ntransform], d_output[i:i+ntransform])
+                inembed = (d_A.shape[0], A.ld) if ndim == 2 else None,
+                onembed = ((d_output.shape[0], d_output.ld) if
+                            ndim == 2 else (d_output.ld, outshape[-1])))
+        plan.transform(d_A if ndim == 2 else d_A[i:i+ntransform],
+                       d_output if ndim == 2 else d_output[i:i+ntransform])
     del plan
     if realA and not econ:
-        pad_func = get_2d_pad_func(outdtype)
+        pad_func = get_2d_pad_func(outdtype, ndim)
         pad_func.prepared_call(
             (6*cuda.Context.get_device().MULTIPROCESSOR_COUNT, 1),
             (256, 1, 1), d_output.gpudata, d_output.ld,
-            size, total_inputs)
-    if econ and not realA:
-        print ("Warning ypcutil.fft.fft: "
-               "requested econ outputs, but getting complex inputs. "
-               "econ is neglected")
+            size[1], size[0], total_inputs)
     return d_output
         
 
@@ -461,16 +463,17 @@ def get_1d_pad_func(dtype):
     """
     Assumes that the array is already allocated and the half of
     the entry is filled with half of the fft results
+    Kernel not optimized.
     """
     template = """
 #include <pycuda/pycuda-complex.hpp>
 __global__ void
-get_1d_pad_kernel(%(type)s* input, int ld, int fftsize, int batch)
+get_1d_pad_kernel(%(type)s* input, int ld, int fftsize, int nbatch)
 {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
     int total_threads = blockDim.x * gridDim.x;
     int entry_per_row = (fftsize>>1);
-    int total_entry = entry_per_row*batch;
+    int total_entry = entry_per_row*nbatch;
     int row, col;
     
     for(int i = tid; i < total_entry; i += total_threads)
@@ -496,39 +499,80 @@ def get_2d_pad_func(dtype, ndim):
     """
     Assumes that the array is already allocated and the half of
     the entry is filled with half of the fft results
+    Kernel not optimized.
     """
     if ndim == 3:
         template = """
 #include <pycuda/pycuda-complex.hpp>
 __global__ void
-get_2d_pad_kernel(%(type)s* input, int ld, int fftsize_x, int fftsize_y, int batch)
+get_2d_pad_kernel(%(type)s* input, int ld, int fftsize_x,
+                  int fftsize_y, int nbatch)
 {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
     int total_threads = blockDim.x * gridDim.x;
-    int entry_per_row = (fftsize>>1);
-    int total_entry = entry_per_row*batch;
-    int row, col;
+    int entry_per_row = (fftsize_x>>1);
+    int entry_per_batch = entry_per_row*fftsize_y;
+    int total_entry = entry_per_batch*nbatch;
+    int row, col, batch, tmp, ind;
     
     for(int i = tid; i < total_entry; i += total_threads)
     {
-        row = i / entry_per_row;
-        col = i %% entry_per_row;
-        input[row*ld + fftsize-col-1] = conj(input[row*ld + col+1]);
+        batch = i / entry_per_batch;
+        tmp = i %% entry_per_batch;
+        row = tmp / entry_per_row;
+        col = tmp %% entry_per_row;
+        ind = batch*ld;
+        if(row == 0)
+        {
+            input[ind + fftsize_x-col-1] = \
+                conj(input[ind + col+1]);
+        }else
+        {
+            input[ind + row*fftsize_x + fftsize_x-col-1] = \
+                conj(input[ind + (fftsize_y-row)*fftsize_x + col+1 ]);
+        }
     }
 }
 
         """
     elif ndim == 2:
         template = """
+#include <pycuda/pycuda-complex.hpp>
+__global__ void
+get_2d_pad_kernel(%(type)s* input, int ld, int fftsize_x,
+                  int fftsize_y, int nbatch)
+{
+    int tid = threadIdx.x + blockIdx.x * blockDim.x;
+    int total_threads = blockDim.x * gridDim.x;
+    int entry_per_row = (fftsize_x>>1);
+    int total_entry = entry_per_row*fftsize_y;
+    int row, col;
     
+    for(int i = tid; i < total_entry; i += total_threads)
+    {
+        row = i / entry_per_row;
+        col = i %% entry_per_row;
+        if(row == 0)
+        {
+            input[fftsize_x-col-1] = conj(input[col+1]);
+        }else
+        {
+            input[row*ld + fftsize_x-col-1] = \
+                conj(input[(fftsize_y-row)*ld + col+1 ]);
+        }
+    }
+}    
+
         """
     else:
         raise ValueError("Wrong ndim to get_2d_pad_func. ndim = " + str(ndim))
     mod = SourceModule(template % {"type": dtype_to_ctype(dtype)},
                        options = ["--ptxas-options=-v"])
     func = mod.get_function('get_2d_pad_kernel')
-    func.prepare([np.intp, np.int32, np.int32, np.int32])
+    func.prepare([np.intp, np.int32, np.int32, np.int32, np.int32])
     #grid = (6*cuda.Context.get_device().MULTIPROCESSOR_COUNT, 1)    
     #block = (256, 1, 1)
     #Used 19 registers, 52 bytes cmem[0], 168 bytes cmem[2]
     return func
+
+
