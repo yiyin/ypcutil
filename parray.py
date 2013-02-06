@@ -29,8 +29,77 @@ def splay(n, M):
     
 def _get_common_dtype(obj1, obj2):
     return (obj1.dtype.type(0) + obj2.dtype.type(0)).dtype
+
+def _get_inplace_dtype(obj1, obj2):
+    """
+    Returns the dtype of obj1,
+    Raise error if
+    1) obj1 is real and obj2 is complex
+    2) obj1 is integer and obj2 is floating
     
+    Parameters
+    ----------
+    obj1 : numpy.ndarray like array
+    obj2 : numpy.ndarray like array
     
+    Returns
+    -------
+    out : np.dtype
+    """
+    if isrealobj(obj1):
+        if iscomplexobj(obj2):
+            raise TypeError("Cannot cast complex dtype to real dtype")
+    if issubclass(obj1.dtype.type, np.integer):
+        if issubclass(obj2.dtype.type, (np.floating, np.complexfloating)):
+            raise TypeError("Cannot cast floating to integer")
+    return obj1.dtype
+
+def _get_common_dtype_with_scalar(scalar, obj1):
+    """
+    return the common dtype between a native scalar (int, float, complex)
+    and the dtype of an ndarray like array.
+    
+    Parameters
+    ----------
+    scalar : int, float, complex
+    obj1 : numpy.ndarray like array.
+    """
+    if issubclass(type(scalar), (int, float, np.integer, np.floating)):
+        return obj1.dtype
+    elif issubclass(type(scalar), (complex, np.complexfloating)):
+        if isrealobj(obj1):
+            return floattocomplex(obj1.dtype)
+        else:
+            return obj1.dtype
+    else:
+        raise TypeError("scalar type is not supported")
+
+def _get_inplace_dtype_with_scalar(scalar, obj1):
+    """
+    Returns the dtype of obj1,
+    Raise error if
+    1) obj1 is real and obj2 is complex
+    2) obj1 is integer and obj2 is floating
+    
+    Parameters
+    ----------
+    obj1 : numpy.ndarray like array
+    obj2 : numpy.ndarray like array
+    
+    Returns
+    -------
+    out : np.dtype
+    """
+    if isrealobj(obj1):
+        if issubclass(type(scalar), (complex, np.complexfloating)):
+            raise TypeError("Cannot cast complex dtype to real dtype")
+    if issubclass(obj1.dtype.type, np.integer):
+        if issubclass(
+                type(scalar), 
+                (float, complex, np.floating, np.complexfloating)):
+            raise TypeError("Cannot cast floating to integer")
+    return obj1.dtype
+
 def _pd(shape):
     s = 1
     for dim in shape[1:]:
@@ -339,13 +408,29 @@ class PitchArray(object):
             dtype = self.dtype
         return self.__class__(self.shape, dtype)
     
+    """""""""
+    Operators:
+    operators defined by __op__(self, other) returns new PitchArray
+    operators defined by op(self, other)  perform inplace operation
+        if inplace cannot be done, error raises
+    operators defined by __iop__(self, other) also perform inplace
+        operation if possbile, otherwise returns a new PitchArray
+    TODO: make the following obey the law
+    make complex of different precision operators
+    """""""""
+    
     def __add__(self, other):
         """
         Addition
         
-        Parameters:
-        ------------------------------------------
+        Parameters
+        ----------
         other: scalar or Pitcharray
+        
+        Returns
+        -------
+        out : PitchArray
+            A new PitchArray
         """
         if isinstance(other, PitchArray):
             if self.shape != other.shape:
@@ -366,26 +451,30 @@ class PitchArray(object):
                         result.gpudata, result.ld, self.gpudata,
                         self.ld, other.gpudata, other.ld)
             return result
-        else:
+        elif issubclass(type(other), (float, int, complex, np.integer,
+                                      np.floating, np.complexfloating)):
+            dtype = _get_common_dtype_with_scalar(other, self)
             if other == 0:
-                return self.copy()
+                return self.astype(dtype)
             else:
-                result = self._new_like_me()
+                result = self._new_like_me(dtype)
                 if self.size:
                     if self.M == 1:
                         func = pu.get_addscalar_function(
-                            self.dtype, pitch = False)
+                            self.dtype, dtype, pitch = False)
                         func.prepared_call(
                             self._grid, self._block, result.gpudata,
                             self.gpudata, other, self.size)
                     else:
                         func = pu.get_addscalar_function(
-                            self.dtype, pitch = True)
+                            self.dtype, dtype, pitch = True)
                         func.prepared_call(
                             self._grid, self._block, self.M, self.N,
                             result.gpudata, result.ld, self.gpudata,
                             self.ld, other)
                 return result
+        else:
+            raise TypeError("type of object to be added is not supported")
 
     __radd__ = __add__
     
@@ -394,9 +483,14 @@ class PitchArray(object):
         Substraction
         self - other
         
-        Parameters:
-        ------------------------------------------
-        other: scalar or Pitcharray
+        Parameters
+        ----------
+        other : scalar or Pitcharray
+        
+        Returns
+        -------
+        out : PitchArray
+            A new PitchArray
         """
         if isinstance(other, PitchArray):
             if self.shape != other.shape:
@@ -417,36 +511,48 @@ class PitchArray(object):
                         result.gpudata, result.ld, self.gpudata,
                         self.ld, other.gpudata, other.ld)
             return result
-        else:
+        elif issubclass(type(other), (float, int, complex, np.integer,
+                                      np.floating, np.complexfloating)):
+            dtype = _get_common_dtype_with_scalar(other, self)
             if other == 0:
-                return self.copy()
+                return self.astype(dtype)
             else:
-                result = self._new_like_me()
+                result = self._new_like_me(dtype)
                 if self.size:
                     if self.M == 1:
                         func = pu.get_subscalar_function(
-                            self.dtype, pitch = False)
+                            self.dtype, dtype, pitch = False)
                         func.prepared_call(
                             self._grid, self._block, result.gpudata,
                             self.gpudata, other, self.size)
                     else:
                         func = pu.get_subscalar_function(
-                            self.dtype, pitch = True)
+                            self.dtype, dtype, pitch = True)
                         func.prepared_call(
                             self._grid, self._block, self.M, self.N,
                             result.gpudata, result.ld, self.gpudata,
                             self.ld, other)
                 return result
+        else:
+            raise TypeError("type of object to be substracted "
+                            "is not supported")
 
     def __rsub__(self, other):
         """
         Being substracted
         Other - self
         
-        Parameters:
-        ------------------------------------------
+        Parameters
+        ----------
         other: scalar or Pitcharray
+        
+        Returns
+        -------
+        out : PitchArray
+            A new PitchArray
         """
+        """
+        # this part is not neccessary
         if isinstance(other, PitchArray):
             if self.shape != other.shape:
                 raise ValueError("array dimension misaligned")
@@ -466,31 +572,42 @@ class PitchArray(object):
                         result.gpudata, result.ld, other.gpudata,
                         other.ld, self.gpudata, self.ld)
             return result
-        else:
-            result = self._new_like_me()
+        """
+        if issubclass(type(other), (float, int, complex, np.integer,
+                                      np.floating, np.complexfloating)):
+            dtype = _get_common_dtype_with_scalar(other, self)
+            result = self._new_like_me(dtype)
             if self.size:
                 if self.M == 1:
                     func = pu.get_scalarsub_function(
-                        self.dtype, pitch = False)
+                        self.dtype, dtype, pitch = False)
                     func.prepared_call(
                         self._grid, self._block, result.gpudata,
                         self.gpudata, other, self.size)
                 else:
                     func = pu.get_scalarsub_function(
-                        self.dtype, pitch = True)
+                        self.dtype, dtype, pitch = True)
                     func.prepared_call(
                         self._grid, self._block, self.M, self.N,
                         result.gpudata, result.ld, self.gpudata,
                         self.ld, other)
             return result
-
+        else:
+            raise TypeError("type of object to substract from "
+                            "is not supported")
+    
     def __mul__(self, other):
         """
         Multiply
         
-        Parameters:
-        ------------------------------------------
+        Parameters
+        ----------
         other: scalar or Pitcharray
+        
+        Returns
+        -------
+        out : PitchArray
+            A new PitchArray
         """
         if isinstance(other, PitchArray):
             if self.shape != other.shape:
@@ -511,27 +628,32 @@ class PitchArray(object):
                         result.gpudata, result.ld, self.gpudata,
                         self.ld, other.gpudata, other.ld)
             return result
-        else:
+        elif issubclass(type(other), (float, int, complex, np.integer,
+                                      np.floating, np.complexfloating)):
+            dtype = _get_common_dtype_with_scalar(other, self)
             if other == 1.0:
-                return self.copy()
+                return self.astype(dtype)
             else:
-                result = self._new_like_me()
+                result = self._new_like_me(dtype)
                 if self.size:
                     if self.M == 1:
                         func = pu.get_mulscalar_function(
-                            self.dtype, pitch = False)
+                            self.dtype, dtype, pitch = False)
                         func.prepared_call(
                             self._grid, self._block, result.gpudata,
                             self.gpudata, other, self.size)
                     else:
                         func = pu.get_mulscalar_function(
-                            self.dtype, pitch = True)
+                            self.dtype, dtype, pitch = True)
                         func.prepared_call(
                             self._grid, self._block, self.M, self.N,
                             result.gpudata, result.ld, self.gpudata,
                             self.ld, other)
                 return result
-
+        else:
+            raise TypeError("type of object to be multiplied "
+                            "is not supported")
+    
     __rmul__ = __mul__
 
     def __div__(self, other):
@@ -539,9 +661,14 @@ class PitchArray(object):
         Division
         self / other
         
-        Parameters:
-        ------------------------------------------
+        Parameters
+        ----------
         other: scalar or Pitcharray
+        
+        Returns
+        -------
+        out : PitchArray
+            A new PitchArray
         """
         if isinstance(other, PitchArray):
             if self.shape != other.shape:
@@ -562,36 +689,48 @@ class PitchArray(object):
                         result.gpudata, result.ld, self.gpudata,
                         self.ld, other.gpudata, other.ld)
             return result
-        else:
+        elif issubclass(type(other), (float, int, complex, np.integer,
+                                      np.floating, np.complexfloating)):
+            dtype = _get_common_dtype_with_scalar(other, self)
             if other == 1.0:
-                return self.copy()
+                return self.astype(dtype)
             else:
-                result = self._new_like_me()
+                result = self._new_like_me(dtype)
                 if self.size:
                     if self.M == 1:
                         func = pu.get_divscalar_function(
-                            self.dtype, pitch = False)
+                            self.dtype, dtype, pitch = False)
                         func.prepared_call(
                             self._grid, self._block, result.gpudata,
                             self.gpudata, other, self.size)
                     else:
                         func = pu.get_divscalar_function(
-                            self.dtype, pitch = True)
+                            self.dtype, dtype, pitch = True)
                         func.prepared_call(
                             self._grid, self._block, self.M, self.N,
                             result.gpudata, result.ld, self.gpudata,
                             self.ld, other)
                 return result
+        else:
+            raise TypeError("type of object to be divided "
+                            "is not supported")
 
     def __rdiv__(self, other):
         """
         Being divided
         other / self
         
-        Parameters:
-        ------------------------------------------
+        Parameters
+        ----------
         other: scalar or Pitcharray
+        
+        Returns
+        -------
+        out : PitchArray
+            A new PitchArray
         """
+        """
+        # this par it not necessary
         if isinstance(other, PitchArray):
             if self.shape != other.shape:
                 raise ValueError("array dimension misaligned")
@@ -611,24 +750,30 @@ class PitchArray(object):
                         result.gpudata, result.ld, other.gpudata,
                         other.ld, self.gpudata, self.ld)
             return result
-        else:
-            result = self._new_like_me()
+        """
+        if issubclass(type(other), (float, int, complex, np.integer,
+                                      np.floating, np.complexfloating)):
+            dtype = _get_common_dtype_with_scalar(other, self)
+            result = self._new_like_me(dtype)
             if self.size:
                 if self.M == 1:
                     func = pu.get_scalardiv_function(
-                        self.dtype, pitch = False)
+                        self.dtype, dtype, pitch = False)
                     func.prepared_call(
                         self._grid, self._block, result.gpudata,
                         self.gpudata, other, self.size)
                 else:
                     func = pu.get_scalardiv_function(
-                        self.dtype, pitch = True)
+                        self.dtype, dtype, pitch = True)
                     func.prepared_call(
                         self._grid, self._block, self.M, self.N,
                         result.gpudata, result.ld, self.gpudata,
                         self.ld, other)
             return result
-
+        else:
+            raise TypeError("type of object to be divided from"
+                            "is not supported")
+    
     def __neg__(self):
         """
         Take negative value
@@ -639,9 +784,17 @@ class PitchArray(object):
         """
         add to self inplace
         
-        Parameters:
-        ------------------------------------------
+        Parameters
+        ----------
         other: scalar or Pitcharray
+        
+        Returns
+        -------
+        out : PitchArray (self)
+        
+        Note
+        ----
+        If other is complex, self is required to be a complex
         """
         if isinstance(other, PitchArray):
             if self.shape != other.shape:
@@ -666,33 +819,46 @@ class PitchArray(object):
                         self.M, self.N, result.gpudata, result.ld,
                         self.gpudata, self.ld, other.gpudata, other.ld)
             return result
-        else:
+        elif issubclass(type(other), (float, int, complex, np.integer,
+                                      np.floating, np.complexfloating)):
+            dtype = _get_common_dtype_with_scalar(other, self)
             if other == 0:
-                return self
+                return self.astype(dtype)
             else:
+                if self.dtype != dtype:
+                    result = self._new_like_me(dtype)
+                else:
+                    result = self
                 if self.size:
                     if self.M == 1:
                         func = pu.get_addscalar_function(
-                            self.dtype, pitch = False)
+                            self.dtype, dtype, pitch = False)
                         func.prepared_call(
-                            self._grid, self._block, self.gpudata,
+                            self._grid, self._block, result.gpudata,
                             self.gpudata, other, self.size)
                     else:
                         func = pu.get_addscalar_function(
-                            self.dtype, pitch = True)
+                            self.dtype, dtype, pitch = True)
                         func.prepared_call(
                             self._grid, self._block, self.M, self.N,
-                            self.gpudata, self.ld, self.gpudata,
+                            result.gpudata, self.ld, self.gpudata,
                             self.ld, other)
-                return self
-
+                return result
+        else:
+            raise TypeError("type of object to be added"
+                            "is not supported")
+    
     def __isub__(self, other):
         """
         Substracted other inplace
         
-        Parameters:
-        ------------------------------------------
+        Parameters
+        ----------
         other: scalar or Pitcharray
+        
+        Returns
+        -------
+        out : PitchArray (self)
         """
         if isinstance(other, PitchArray):
             if self.shape != other.shape:
@@ -718,33 +884,47 @@ class PitchArray(object):
                         result.gpudata, result.ld, self.gpudata,
                         self.ld, other.gpudata, other.ld)
             return result
-        else:
+        elif issubclass(type(other), (float, int, complex, np.integer,
+                                      np.floating, np.complexfloating)):
+            dtype = _get_common_dtype_with_scalar(other, self)
             if other == 0:
-                return self
+                return self.astype(dtype)
             else:
+                if self.dtype != dtype:
+                    result = self._new_like_me(dtype)
+                else:
+                    result = self
                 if self.size:
                     if self.M == 1:
                         func = pu.get_subscalar_function(
-                            self.dtype, pitch = False)
+                            self.dtype, dtype, pitch = False)
                         func.prepared_call(
-                            self._grid, self._block, self.gpudata,
+                            self._grid, self._block, result.gpudata,
                             self.gpudata, other, self.size)
                     else:
                         func = pu.get_subscalar_function(
-                            self.dtype, pitch = True)
+                            self.dtype, dtype, pitch = True)
                         func.prepared_call(
                             self._grid, self._block, self.M, self.N,
-                            self.gpudata, self.ld, self.gpudata,
+                            result.gpudata, self.ld, self.gpudata,
                             self.ld, other)
-                return self
-
+                return result
+        else:
+            raise TypeError("type of object to be substracted"
+                            "is not supported")
+    
     def __imul__(self, other):
         """
-        Multiplied by other inplace
+        Multiplied by other
+        inplace if possible
         
-        Parameters:
-        ------------------------------------------
+        Parameters
+        ----------
         other: scalar or Pitcharray
+        
+        Returns
+        -------
+        out : PitchArray (self)
         """
         if isinstance(other, PitchArray):
             if self.shape != other.shape:
@@ -770,33 +950,47 @@ class PitchArray(object):
                         result.gpudata, result.ld, self.gpudata,
                         self.ld, other.gpudata, other.ld)
             return result
-        else:
+        elif issubclass(type(other), (float, int, complex, np.integer,
+                                      np.floating, np.complexfloating)):
+            dtype = _get_common_dtype_with_scalar(other, self)
             if other == 1.0:
-                return self
+                return self.astype(dtype)
             else:
+                if self.dtype != dtype:
+                    result = self._new_like_me(dtype)
+                else:
+                    result = self
                 if self.size:
                     if self.M == 1:
                         func = pu.get_mulscalar_function(
-                            self.dtype, pitch = False)
+                            self.dtype, dtype, pitch = False)
                         func.prepared_call(
-                            self._grid, self._block, self.gpudata,
+                            self._grid, self._block, result.gpudata,
                             self.gpudata, other, self.size)
                     else:
                         func = pu.get_mulscalar_function(
-                            self.dtype, pitch = True)
+                            self.dtype, dtype, pitch = True)
                         func.prepared_call(
                             self._grid, self._block, self.M, self.N,
-                            self.gpudata, self.ld, self.gpudata,
+                            result.gpudata, self.ld, self.gpudata,
                             self.ld, other)
-                return self
-
+                return result
+        else:
+            raise TypeError("type of object to be multiplied"
+                            "is not supported")
+    
     def __idiv__(self, other):
         """
-        Divided by other inplace
+        Divided by other
+        inplace if possible
         
-        Parameters:
-        ------------------------------------------
+        Parameters
+        ----------
         other: scalar or Pitcharray
+        
+        Returns
+        -------
+        out : PitchArray (self)
         """
         if isinstance(other, PitchArray):
             if self.shape != other.shape:
@@ -822,152 +1016,334 @@ class PitchArray(object):
                         result.gpudata, result.ld, self.gpudata,
                         self.ld, other.gpudata, other.ld)
             return result
-        else:
+        elif issubclass(type(other), (float, int, complex, np.integer,
+                                      np.floating, np.complexfloating)):
+            dtype = _get_common_dtype_with_scalar(other, self)
             if other == 1.0:
-                return self
+                return self.astype(dtype)
             else:
+                if self.dtype != dtype:
+                    result = self._new_like_me(dtype)
+                else:
+                    result = self
                 if self.size:
                     if self.M == 1:
                         func = pu.get_divscalar_function(
-                            self.dtype, pitch = False)
+                            self.dtype, dtype, pitch = False)
                         func.prepared_call(
-                            self._grid, self._block, self.gpudata,
+                            self._grid, self._block, result.gpudata,
                             self.gpudata, other, self.size)
                     else:
                         func = pu.get_divscalar_function(
-                            self.dtype, pitch = True)
+                            self.dtype, dtype, pitch = True)
                         func.prepared_call(
                             self._grid, self._block, self.M, self.N,
-                            self.gpudata, self.ld, self.gpudata,
+                            result.gpudata, self.ld, self.gpudata,
                             self.ld, other)
-                return self
+                return result
+        else:
+            raise TypeError("type of object to be divided"
+                            "is not supported")
 
     def add(self, other):
         """
         add other to self
-        inplace if possible
+        inplace
         """
-        return self.__iadd__(other)
+        if isinstance(other, PitchArray):
+            if self.shape != other.shape:
+                raise ValueError("array dimension misaligned")
+            dtype = _get_inplace_dtype(self, other)
+            if self.size:
+                if self.M == 1:
+                    func = pu.get_addarray_function(
+                        self.dtype, other.dtype, self.dtype, pitch = False)
+                    func.prepared_call(
+                        self._grid, self._block, self.gpudata,
+                        self.gpudata, other.gpudata, self.size)
+                else:
+                    func = pu.get_addarray_function(
+                        self.dtype, other.dtype, self.dtype, pitch = True)
+                    func.prepared_call(self._grid, self._block,
+                        self.M, self.N, self.gpudata, self.ld,
+                        self.gpudata, self.ld, other.gpudata, other.ld)
+            return self
+        elif issubclass(type(other), (float, int, complex, np.integer,
+                                      np.floating, np.complexfloating)):
+            dtype = _get_inplace_dtype_with_scalar(other, self)
+            if other != 0:
+                if self.size:
+                    if self.M == 1:
+                        func = pu.get_addscalar_function(
+                            self.dtype, self.dtype, pitch = False)
+                        func.prepared_call(
+                            self._grid, self._block, self.gpudata,
+                            self.gpudata, other, self.size)
+                    else:
+                        func = pu.get_addscalar_function(
+                            self.dtype, self.dtype, pitch = True)
+                        func.prepared_call(
+                            self._grid, self._block, self.M, self.N,
+                            self.gpudata, self.ld, self.gpudata,
+                            self.ld, other)
+            return self
+        else:
+            raise TypeError("type of object to be added"
+                            "is not supported")
 
     def sub(self, other):
         """
         substract other from self
-        inplace if possible
+        inplace
         """
-        return self.__isub__(other)
+        if isinstance(other, PitchArray):
+            if self.shape != other.shape:
+                raise ValueError("array dimension misaligned")
+            dtype = _get_inplace_dtype(self, other)
+            if self.size:
+                if self.M == 1:
+                    func = pu.get_subarray_function(
+                        self.dtype, other.dtype, self.dtype, pitch = False)
+                    func.prepared_call(
+                        self._grid, self._block, self.gpudata,
+                        self.gpudata, other.gpudata, self.size)
+                else:
+                    func = pu.get_subarray_function(
+                        self.dtype, other.dtype, self.dtype, pitch = True)
+                    func.prepared_call(self._grid, self._block,
+                        self.M, self.N, self.gpudata, self.ld,
+                        self.gpudata, self.ld, other.gpudata, other.ld)
+            return self
+        elif issubclass(type(other), (float, int, complex, np.integer,
+                                      np.floating, np.complexfloating)):
+            dtype = _get_inplace_dtype_with_scalar(other, self)
+            if other != 0:
+                if self.size:
+                    if self.M == 1:
+                        func = pu.get_subscalar_function(
+                            self.dtype, self.dtype, pitch = False)
+                        func.prepared_call(
+                            self._grid, self._block, self.gpudata,
+                            self.gpudata, other, self.size)
+                    else:
+                        func = pu.get_subscalar_function(
+                            self.dtype, self.dtype, pitch = True)
+                        func.prepared_call(
+                            self._grid, self._block, self.M, self.N,
+                            self.gpudata, self.ld, self.gpudata,
+                            self.ld, other)
+            return self
+        else:
+            raise TypeError("type of object to be substracted"
+                            "is not supported")
 
     def rsub(self, other):
         """
         substract other by self
-        inplace if possible
+        inplace
         """
         if isinstance(other, PitchArray):
             if self.shape != other.shape:
                 raise ValueError("array dimension misaligned")
-            dtype = _get_common_dtype(self, other)
-            if self.dtype == dtype:
-                result = self
-            else:
-                result = self._new_like_me(dtype = dtype)
-                
+            dtype = _get_inplace_dtype(self, other)
             if self.size:
                 if self.M == 1:
                     func = pu.get_subarray_function(
-                        other.dtype, self.dtype, result.dtype, pitch = False)
+                        other.dtype, self.dtype, self.dtype, pitch = False)
                     func.prepared_call(
-                        self._grid, self._block, result.gpudata,
+                        self._grid, self._block, self.gpudata,
                         other.gpudata, self.gpudata, self.size)
                 else:
                     func = pu.get_subarray_function(
-                        other.dtype, self.dtype, result.dtype, pitch = True)
+                        other.dtype, self.dtype, self.dtype, pitch = True)
                     func.prepared_call(
                         self._grid, self._block, self.M, self.N,
-                        result.gpudata, result.ld, other.gpudata,
+                        self.gpudata, self.ld, other.gpudata,
                         other.ld, self.gpudata, self.ld)
-            return result
+            return self
+        elif issubclass(type(other), (float, int, complex, np.integer,
+                                      np.floating, np.complexfloating)):
+            dtype = _get_inplace_dtype_with_scalar(other, self)
+            if self.size:
+                if self.M == 1:
+                    func = pu.get_scalarsub_function(
+                        self.dtype, self.dtype, pitch = False)
+                    func.prepared_call(
+                        self._grid, self._block, self.gpudata,
+                        self.gpudata, other, self.size)
+                else:
+                    func = pu.get_scalarsub_function(
+                        self.dtype, self.dtype, pitch = True)
+                    func.prepared_call(
+                        self._grid, self._block, self.M, self.N,
+                        self.gpudata, self.ld, self.gpudata,
+                        self.ld, other)
+            return self
         else:
-            if other == 0:
-                return self
-            else:
+            raise TypeError("type of object to substract from"
+                            "is not supported")
+    
+    def mul(self, other):
+        """
+        multiply other with self
+        inplace
+        """
+        if isinstance(other, PitchArray):
+            if self.shape != other.shape:
+                raise ValueError("array dimension misaligned")
+            dtype = _get_inplace_dtype(self, other)
+            if self.size:
+                if self.M == 1:
+                    func = pu.get_mularray_function(
+                        self.dtype, other.dtype, self.dtype, pitch = False)
+                    func.prepared_call(
+                        self._grid, self._block, self.gpudata,
+                        self.gpudata, other.gpudata, self.size)
+                else:
+                    func = pu.get_mularray_function(
+                        self.dtype, other.dtype, self.dtype, pitch = True)
+                    func.prepared_call(self._grid, self._block,
+                        self.M, self.N, self.gpudata, self.ld,
+                        self.gpudata, self.ld, other.gpudata, other.ld)
+            return self
+        elif issubclass(type(other), (float, int, complex, np.integer,
+                                      np.floating, np.complexfloating)):
+            dtype = _get_inplace_dtype_with_scalar(other, self)
+            if other != 1:
                 if self.size:
                     if self.M == 1:
-                        func = pu.get_scalarsub_function(
-                            self.dtype, pitch = False)
+                        func = pu.get_mulscalar_function(
+                            self.dtype, self.dtype, pitch = False)
                         func.prepared_call(
                             self._grid, self._block, self.gpudata,
                             self.gpudata, other, self.size)
                     else:
-                        func = pu.get_scalarsub_function(
-                            self.dtype, pitch = True)
+                        func = pu.get_mulscalar_function(
+                            self.dtype, self.dtype, pitch = True)
                         func.prepared_call(
                             self._grid, self._block, self.M, self.N,
                             self.gpudata, self.ld, self.gpudata,
                             self.ld, other)
-                return self
-
-    def mul(self, other):
-        """
-        multiply other with self
-        inplace if possible
-        """
-        return self.__imul__(other)
+            return self
+        else:
+            raise TypeError("type of object to be multiplied"
+                            "is not supported")
 
     def div(self, other):
         """
         divide other from self
-        inplace if possible
-        """
-        return self.__idiv__(other)
-
-    def rdiv(self, other):
-        """
-        divide other by self
-        inplace if possible
+        inplace
         """
         if isinstance(other, PitchArray):
             if self.shape != other.shape:
                 raise ValueError("array dimension misaligned")
-            dtype = _get_common_dtype(self, other)
-            if self.dtype == dtype:
-                result = self
-            else:
-                result = self._new_like_me(dtype = dtype)
-                
+            dtype = _get_inplace_dtype(self, other)
             if self.size:
                 if self.M == 1:
                     func = pu.get_divarray_function(
-                        other.dtype, self.dtype, result.dtype, pitch = False)
+                        self.dtype, other.dtype, self.dtype, pitch = False)
                     func.prepared_call(
-                        self._grid, self._block, result.gpudata,
-                        other.gpudata, self.gpudata, self.size)
+                        self._grid, self._block, self.gpudata,
+                        self.gpudata, other.gpudata, self.size)
                 else:
                     func = pu.get_divarray_function(
-                        other.dtype, self.dtype, result.dtype, pitch = True)
-                    func.prepared_call(
-                        self._grid, self._block, self.M, self.N,
-                        result.gpudata, result.ld, other.gpudata,
-                        other.ld, self.gpudata, self.ld)
-            return result
-        else:
-            if other == 0:
-                return self
-            else:
+                        self.dtype, other.dtype, self.dtype, pitch = True)
+                    func.prepared_call(self._grid, self._block,
+                        self.M, self.N, self.gpudata, self.ld,
+                        self.gpudata, self.ld, other.gpudata, other.ld)
+            return self
+        elif issubclass(type(other), (float, int, complex, np.integer,
+                                      np.floating, np.complexfloating)):
+            dtype = _get_inplace_dtype_with_scalar(other, self)
+            if other != 1:
                 if self.size:
                     if self.M == 1:
-                        func = pu.get_scalardiv_function(
-                            self.dtype, pitch = False)
+                        func = pu.get_divscalar_function(
+                            self.dtype, self.dtype, pitch = False)
                         func.prepared_call(
                             self._grid, self._block, self.gpudata,
                             self.gpudata, other, self.size)
                     else:
-                        func = pu.get_scalardiv_function(
-                            self.dtype, pitch = True)
+                        func = pu.get_divscalar_function(
+                            self.dtype, self.dtype, pitch = True)
                         func.prepared_call(
                             self._grid, self._block, self.M, self.N,
                             self.gpudata, self.ld, self.gpudata,
                             self.ld, other)
-                return self
+            return self
+        else:
+            raise TypeError("type of object to be divided"
+                            "is not supported")
 
+    def rdiv(self, other):
+        """
+        divide other by self
+        inplace
+        """
+        if isinstance(other, PitchArray):
+            if self.shape != other.shape:
+                raise ValueError("array dimension misaligned")
+            dtype = _get_inplace_dtype(self, other)
+            if self.size:
+                if self.M == 1:
+                    func = pu.get_divarray_function(
+                        other.dtype, self.dtype, self.dtype, pitch = False)
+                    func.prepared_call(
+                        self._grid, self._block, self.gpudata,
+                        other.gpudata, self.gpudata, self.size)
+                else:
+                    func = pu.get_divarray_function(
+                        other.dtype, self.dtype, self.dtype, pitch = True)
+                    func.prepared_call(
+                        self._grid, self._block, self.M, self.N,
+                        self.gpudata, self.ld, other.gpudata,
+                        other.ld, self.gpudata, self.ld)
+            return self
+        elif issubclass(type(other), (float, int, complex, np.integer,
+                                      np.floating, np.complexfloating)):
+            dtype = _get_inplace_dtype_with_scalar(other, self)
+            if self.size:
+                if self.M == 1:
+                    func = pu.get_scalardiv_function(
+                        self.dtype, self.dtype, pitch = False)
+                    func.prepared_call(
+                        self._grid, self._block, self.gpudata,
+                        self.gpudata, other, self.size)
+                else:
+                    func = pu.get_scalardiv_function(
+                        self.dtype, dtype, pitch = True)
+                    func.prepared_call(
+                        self._grid, self._block, self.M, self.N,
+                        self.gpudata, self.ld, self.gpudata,
+                        self.ld, other)
+            return self
+        else:
+            raise TypeError("type of object to divide from"
+                            "is not supported")
+    def neg(self):
+        """
+        Take the negative of self inplace
+        
+        Returns
+        -------
+        self
+        """
+        if self.size:
+            if self.M == 1:
+                func = pu.get_scalarsub_function(
+                    self.dtype, self.dtype, pitch = False)
+                func.prepared_call(
+                    self._grid, self._block, self.gpudata,
+                    self.gpudata, 0, self.size)
+            else:
+                func = pu.get_scalarsub_function(
+                    self.dtype, self.dtype, pitch = True)
+                func.prepared_call(
+                    self._grid, self._block, self.M, self.N,
+                    self.gpudata, self.ld, self.gpudata,
+                    self.ld, 0)
+        return self
+    
     def fill(self, value, stream=None):
         """
         Fill all entries of self with value
@@ -1179,6 +1555,7 @@ class PitchArray(object):
         dtype: np.dtype
                dtype of the returned array
         """
+        dtype = np.dtype(dtype)
         if self.dtype == dtype:
             return self.copy()
         else:
@@ -1597,7 +1974,7 @@ def complextofloat(dtype):
                         " cannot be translated to floating")
     return outdtype
 
-def complex(real, imag):
+def make_complex(real, imag):
     """
     Create a complex array using two real arrays
     
