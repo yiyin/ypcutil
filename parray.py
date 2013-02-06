@@ -6,9 +6,10 @@
 #array with a pitched structure
 #and varies operation on it.
 
+import numpy as np
 import pycuda.driver as cuda
 from pytools import memoize
-import numpy as np
+
 import parray_utils as pu
 
 """ utilities"""
@@ -29,6 +30,7 @@ def splay(n, M):
     
 def _get_common_dtype(obj1, obj2):
     return (obj1.dtype.type(0) + obj2.dtype.type(0)).dtype
+
 
 def _get_inplace_dtype(obj1, obj2):
     """
@@ -74,6 +76,7 @@ def _get_common_dtype_with_scalar(scalar, obj1):
     else:
         raise TypeError("scalar type is not supported")
 
+
 def _get_inplace_dtype_with_scalar(scalar, obj1):
     """
     Returns the dtype of obj1,
@@ -99,6 +102,7 @@ def _get_inplace_dtype_with_scalar(scalar, obj1):
                 (float, complex, np.floating, np.complexfloating)):
             raise TypeError("Cannot cast floating to integer")
     return obj1.dtype
+
 
 def _pd(shape):
     s = 1
@@ -415,8 +419,6 @@ class PitchArray(object):
         if inplace cannot be done, error raises
     operators defined by __iop__(self, other) also perform inplace
         operation if possbile, otherwise returns a new PitchArray
-    TODO: make the following obey the law
-    make complex of different precision operators
     """""""""
     
     def __add__(self, other):

@@ -6,14 +6,20 @@ import pycuda.driver as cuda
 from pycuda.compiler import SourceModule
 from pycuda.tools import dtype_to_ctype
 
+
+# This class is just to facilitate memorizing all kernels
+# that has been compiled.
 class function_holder(object):
     def __init__(self):
         pass
-        
+
+
 _kernels = function_holder()
+
 
 def _get_type(dtype):
     return dtype.type if isinstance(dtype, np.dtype) else dtype
+
 
 def get_fill_function(dtype, pitch = True):
     global _kernels
