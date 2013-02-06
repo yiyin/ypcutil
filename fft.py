@@ -85,6 +85,10 @@ class fftplan(object):
         # TODO: check if d_in and d_out is the same,
         # if they are the same, check if idist, is larger than prod(shape)
         # to avoid error
+        if int(d_in.gpudata) == int(d_out.gpudata):
+            from warnings import warn
+            warn("Doing FFT inplace, make sure you know what you are doing.")
+        
         if self.fftdir is None:
             self.fftfunc(self.plan, int(d_in.gpudata), int(d_out.gpudata))
         else:
@@ -271,7 +275,6 @@ def fft(d_A, econ = False):
         outdtype)
     
     batch_size = min(total_inputs, 128)
-    # TODO: check if d_output.ld is correct for vectors
     plan = fftplan(size, A.dtype, A.ld, d_output.ld,
                  forward = True, econ = realA,
                  batch_size = batch_size)
