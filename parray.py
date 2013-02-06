@@ -1960,7 +1960,7 @@ def floattocomplex(dtype):
     else:
         raise TypeError("input dtype " + str(dtype) +
                         " cannot be translated to complex floating")
-    return outdtype
+    return np.dtype(outdtype)
 
 
 def complextofloat(dtype):
@@ -1974,7 +1974,7 @@ def complextofloat(dtype):
     else:
         raise TypeError("input dtype " + str(dtype) +
                         " cannot be translated to floating")
-    return outdtype
+    return np.dtype(outdtype)
 
 def make_complex(real, imag):
     """
@@ -2004,11 +2004,11 @@ def make_complex(real, imag):
         raise TypeError("real and imaginary parts must be real array")
     dtype = _get_common_dtype(real, imag)
     if dtype in [np.int32, np.float32]:
-        dtype = np.complex64
+        dtype = np.dtype(np.complex64)
     elif dtype in [np.int64, np.float64]:
-        dtype = np.complex128
+        dtype = np.dtype(np.complex128)
     else:
-        dtype = np.complex64
+        dtype = np.dtype(np.complex64)
     
     result = empty(real.shape, dtype)
     if result.size:
