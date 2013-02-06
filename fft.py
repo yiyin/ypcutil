@@ -377,7 +377,22 @@ def ifft(d_A, econ = False, even_size = None,
 
 def fft2(d_A, econ = False):
     """
+    Perform 2D fft on the last two axis of d_A
+    can accept only 2D or 3D array
     
+    Parameters
+    ----------
+    d_A : parray.PitchArray
+        Input array, complex or real
+    econ : bool, optional
+        Only applies when d_A is real
+        If True, the output only contains half of the fft result,
+        the other half can be inferred.
+    
+    Returns
+    -------
+    out : parray.PitchArray, complex
+        Containing the fft of corresponding to the inputs.
     """
     ndim = len(d_A.shape)
     if ndim == 2:
@@ -386,6 +401,8 @@ def fft2(d_A, econ = False):
     elif ndim == 3:
         total_inputs = d_A.shape[0]
         size = d_A.shape[1:3]
+    else:
+        raise ValueError("Input to fft2 must be of 2D or 3D")
     realA = parray.isrealobj(d_A)
     
     if econ and not realA:
@@ -413,7 +430,7 @@ def fft2(d_A, econ = False):
             plan = fftplan(
                 size, d_A.dtype, d_A.ld, d_output.ld, forward = True,
                 econ = realA, batch_size = ntransform, 
-                inembed = (d_A.shape[0], A.ld) if ndim == 2 else None,
+                inembed = (d_A.shape[0], d_A.ld) if ndim == 2 else None,
                 onembed = ((d_output.shape[0], d_output.ld) if
                             ndim == 2 else (d_output.ld, outshape[-1])))
         plan.transform(d_A if ndim == 2 else d_A[i:i+ntransform],
@@ -428,8 +445,93 @@ def fft2(d_A, econ = False):
     return d_output
         
 
-def ifft2(A):
-    pass
+def ifft2(d_A, econ = False, even_size = None,
+          scale = True, scalevalue = None):
+    """
+    Perform 2D inverse fft on the last two axes of d_A
+    can accept only 2D or 3D array
+    
+    Parameters
+    ----------
+    d_A : parray.PitchArray
+        Input array, complex, 2D or 3D
+        For 3D arrays, ifft will be performed on the last two axes.
+    econ : bool, optional
+        Whether the dft is stored in econ fashion in d_A.
+    even_size : bool or None, optional
+        Only effects when econ is True.
+        If None, the size of fft is inferred.
+        from element in d_A if d_A is real.
+        If True, size of fft is even, else odd.
+    scale : bool, optional
+        Whether to scale the ifft to true ifft results.
+        If false, the returned ifft is not normalize by N,
+        where N is the size of ifft.
+        If True, the ifft is normalized to be the true idft.
+    scalevalue : float or None, optioinal
+        Only takes effect when scale if True.
+        If None, scale to the default size 1/N.
+        If float, scale by value float.
+        
+    Returns
+    -------
+    out : parray.PitchArray
+        If econ is True, returns real array
+        Otherwise, returns complex array.
+    """
+    ndim = len(d_A.shape)
+    
+    if ndim == 2:
+        total_inputs = 1
+        if econ:
+            if even_size is None:
+                even_size = check_even_econ_1d(d_A, d_A.shape[1])
+            size = (d_A.shape[0],
+                    (d_A.shape[1]-1)*2 + (0 if even_size else 1))
+        else:
+            size = d_A.shape
+    elif ndim == 3:
+        total_inputs = d_A.shape[0]
+        if econ:
+            if even_size is None:
+                even_size = check_even_econ_1d(d_A, d_A.shape[2])
+            size = (d_A.shape[1],
+                    (d_A.shape[2]-1)*2 + (0 if even_size else 1))
+        else:
+            size = d_A.shape[1:3]
+    else:
+        raise ValueError("Input to ifft2 must be 2D or 3D")
+    outdtype = parray.complextofloat(d_A.dtype) if econ else d_A.dtype        
+    d_output = (parray.empty((total_inputs, size[0], size[1]), outdtype) if
+                    ndim == 3 else parray.empty(size, outdtype))
+    
+    batch_size = min(total_inputs, 128)
+    plan = fftplan(size, d_A.dtype, d_A.ld, d_output.ld,
+                 forward = False, econ = econ,
+                 batch_size = batch_size,
+                 inembed = ((d_A.shape[0], d_A.ld) if
+                    ndim == 2 else (d_A.ld, d_A.shape[2])),
+                 onembed = ((d_output.shape[0], d_output.ld) if
+                            ndim == 2 else None))
+    for i in range(0, total_inputs, batch_size):
+        ntransform = min(batch_size, total_inputs-i)
+        if ntransform != batch_size:
+            del plan
+            plan = fftplan(size, d_A.dtype, d_A.ld, d_output.ld,
+                 forward = False, econ = econ,
+                 batch_size = ntransform,
+                 inembed = ((d_A.shape[0], d_A.ld) if
+                    ndim == 2 else (d_A.ld, d_A.shape[2])),
+                 onembed = ((d_output.shape[0], d_output.ld) if
+                            ndim == 2 else None))
+        plan.transform(d_A if ndim == 2 else d_A[i:i+ntransform],
+                       d_output if ndim == 2 else d_output[i:i+ntransform])
+    del plan
+    if scale:
+        if scalevalue is None:
+            scalevalue = 1./size[1]/size[0]
+        d_output *= scalevalue
+    return d_output
     
 
 def check_even_econ_1d(A, size):
