@@ -288,7 +288,7 @@ def fft(d_A, econ = False):
         plan.transform(A[i:i+ntransform], d_output[i:i+ntransform])
     del plan
     if realA and not econ:
-        pad_func = get_1d_pad_func(outdtype)
+        pad_func = _get_1d_pad_func(outdtype)
         pad_func.prepared_call(
             (6*cuda.Context.get_device().MULTIPROCESSOR_COUNT, 1),
             (256, 1, 1), d_output.gpudata, d_output.ld,
@@ -336,7 +336,7 @@ def ifft(d_A, econ = False, even_size = None,
         total_inputs = 1
         if econ:
             if even_size is None:
-                even_size = check_even_econ_1d(A, max(A.shape))
+                even_size = _check_even_econ_1d(A, max(A.shape))
             size = (max(A.shape)-1)*2 if even_size else (max(A.shape)-1)*2+1
         else:
             size = max(A.shape)
@@ -347,7 +347,7 @@ def ifft(d_A, econ = False, even_size = None,
         total_inputs = max(A.shape)
         if econ:
             if even_size is None:
-                even_size = check_even_econ_1d(A, A.shape[1])
+                even_size = _check_even_econ_1d(A, A.shape[1])
             size = (A.shape[1]-1)*2 if even_size else (A.shape[1]-1)*2+1
         else:
             size = A.shape[1]
@@ -440,7 +440,7 @@ def fft2(d_A, econ = False):
                        d_output if ndim == 2 else d_output[i:i+ntransform])
     del plan
     if realA and not econ:
-        pad_func = get_2d_pad_func(outdtype, ndim)
+        pad_func = _get_2d_pad_func(outdtype, ndim)
         pad_func.prepared_call(
             (6*cuda.Context.get_device().MULTIPROCESSOR_COUNT, 1),
             (256, 1, 1), d_output.gpudata, d_output.ld,
@@ -488,7 +488,7 @@ def ifft2(d_A, econ = False, even_size = None,
         total_inputs = 1
         if econ:
             if even_size is None:
-                even_size = check_even_econ_1d(d_A, d_A.shape[1])
+                even_size = _check_even_econ_1d(d_A, d_A.shape[1])
             size = (d_A.shape[0],
                     (d_A.shape[1]-1)*2 + (0 if even_size else 1))
         else:
@@ -497,7 +497,7 @@ def ifft2(d_A, econ = False, even_size = None,
         total_inputs = d_A.shape[0]
         if econ:
             if even_size is None:
-                even_size = check_even_econ_1d(d_A, d_A.shape[2])
+                even_size = _check_even_econ_1d(d_A, d_A.shape[2])
             size = (d_A.shape[1],
                     (d_A.shape[2]-1)*2 + (0 if even_size else 1))
         else:
@@ -537,7 +537,7 @@ def ifft2(d_A, econ = False, even_size = None,
     return d_output
     
 
-def check_even_econ_1d(A, size):
+def _check_even_econ_1d(A, size):
     """
     Check whether the fft size of A is even or odd.
     
@@ -564,7 +564,7 @@ def check_even_econ_1d(A, size):
     return a.imag == 0.0
 
 
-def get_1d_pad_func(dtype):
+def _get_1d_pad_func(dtype):
     """
     Assumes that the array is already allocated and the half of
     the entry is filled with half of the fft results
@@ -600,7 +600,7 @@ get_1d_pad_kernel(%(type)s* input, int ld, int fftsize, int nbatch)
     return func
 
 
-def get_2d_pad_func(dtype, ndim):
+def _get_2d_pad_func(dtype, ndim):
     """
     Assumes that the array is already allocated and the half of
     the entry is filled with half of the fft results
