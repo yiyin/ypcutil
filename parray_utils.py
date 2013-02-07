@@ -23,9 +23,10 @@ def _get_type(dtype):
 
 def get_fill_function(dtype, pitch = True):
     global _kernels
+    id = cuda.Context.get_device().PCI_BUS_ID
     type_dst = dtype_to_ctype(dtype)
     name = "fill"
-    funcname = name+'_'+dtype.name
+    funcname = name+'_'+str(id)+'_'+dtype.name
     
     if pitch:
         attname = 'pitch_'+funcname
@@ -59,11 +60,12 @@ def get_fill_function(dtype, pitch = True):
 
 def get_astype_function(dtype_dest, dtype_src, pitch = True):
     global _kernels
+    id = cuda.Context.get_device().PCI_BUS_ID
     type_dest = dtype_to_ctype(dtype_dest)
     type_src = dtype_to_ctype(dtype_src)
     name = "astype"
     operation = ""
-    funcname = name+'_'+dtype_src.name+'_'+dtype_dest.name
+    funcname = name+'_'+str(id)+'_'+dtype_src.name+'_'+dtype_dest.name
     
     if pitch:
         attname = 'pitch_'+funcname
@@ -101,8 +103,9 @@ def get_astype_function(dtype_dest, dtype_src, pitch = True):
     
 def get_realimag_function(dtype, real = True, pitch = True):
     global _kernels
+    id = cuda.Context.get_device().PCI_BUS_ID
     type_src = dtype_to_ctype(dtype)
-    funcname = name+'_'+dtype.name
+    funcname = name+'_'+str(id)+'_'+dtype.name
     
     if dtype == np.complex64:
         type_dest = "float"
@@ -160,6 +163,7 @@ def get_realimag_function(dtype, real = True, pitch = True):
 
 def get_abs_function(dtype, pitch = True):
     global _kernels
+    id = cuda.Context.get_device().PCI_BUS_ID
     type_src = dtype_to_ctype(dtype)
     if dtype == np.complex128:
         operation = "pycuda::abs"
@@ -177,7 +181,7 @@ def get_abs_function(dtype, pitch = True):
         operation = "abs"
         type_dest = dtype_to_ctype(dtype)
     name = "abs_function"
-    funcname = name+'_'+dtype.name
+    funcname = name+'_'+str(id)+'_'+dtype.name
     
     if pitch:
         attname = 'pitch_'+funcname
@@ -215,6 +219,7 @@ def get_abs_function(dtype, pitch = True):
 
 def get_conj_function(dtype, pitch = True):
     global _kernels
+    id = cuda.Context.get_device().PCI_BUS_ID
     type_src = dtype_to_ctype(dtype)
     if dtype == np.complex128:
         operation = "pycuda::conj"
@@ -224,7 +229,7 @@ def get_conj_function(dtype, pitch = True):
         raise TypeError("Only complex arrays are allowed "
                         "to perform conjugation")
     name = "conj"
-    funcname = name+'_'+dtype.name
+    funcname = name+'_'+str(id)+'_'+dtype.name
     
     if pitch:
         attname = 'pitch_'+funcname
@@ -262,9 +267,10 @@ def get_conj_function(dtype, pitch = True):
 
 def get_resize_function(dtype):
     global _kernels
+    id = cuda.Context.get_device().PCI_BUS_ID
     type_src = dtype_to_ctype(dtype)
     name = "resize"
-    funcname = name+'_'+dtype.name
+    funcname = name+'_'+str(id)+'_'+dtype.name
     
     attname = 'pitch_'+funcname
     if hasattr(_kernels, attname):
@@ -286,10 +292,11 @@ def get_resize_function(dtype):
 
 def get_transpose_function(dtype, conj = False):
     global _kernels
+    id = cuda.Context.get_device().PCI_BUS_ID
     src_type = dtype_to_ctype(dtype)
     name = "trans"
     operation = ""
-    funcname = name+'_'+dtype.name
+    funcname = name+'_'+str(id)+'_'+dtype.name
     
     if conj:
         if dtype == np.complex128:
@@ -317,13 +324,14 @@ def get_transpose_function(dtype, conj = False):
 def get_addarray_function(left_dtype, right_dtype,
                           rslt_dtype, pitch = True):
     global _kernels
+    id = cuda.Context.get_device().PCI_BUS_ID
     type_left = dtype_to_ctype(left_dtype)
     type_right = dtype_to_ctype(right_dtype)
     type_rslt = dtype_to_ctype(rslt_dtype)
 
     name = "addarray"
     operation = "+"
-    funcname = (name+'_'+left_dtype.name+'_'+
+    funcname = (name+'_'+str(id)+'_'+left_dtype.name+'_'+
                 right_dtype.name+'_'+rslt_dtype.name)
     
     if pitch:
@@ -364,11 +372,12 @@ def get_addarray_function(left_dtype, right_dtype,
 
 def get_addscalar_function(src_type, dest_type, pitch = True):
     global _kernels
+    id = cuda.Context.get_device().PCI_BUS_ID
     type_src = dtype_to_ctype(src_type)
     type_dest = dtype_to_ctype(dest_type)
     name = "addscalar"
     operation = "+"
-    funcname = name+'_'+src_type.name+'_'+dest_type.name
+    funcname = name+'_'+str(id)+'_'+src_type.name+'_'+dest_type.name
     
     if pitch:
         attname = 'pitch_'+funcname
@@ -406,12 +415,13 @@ def get_addscalar_function(src_type, dest_type, pitch = True):
 
 def get_subarray_function(left_dtype, right_dtype, rslt_dtype, pitch = True):
     global _kernels
+    id = cuda.Context.get_device().PCI_BUS_ID
     type_left = dtype_to_ctype(left_dtype)
     type_right = dtype_to_ctype(right_dtype)
     type_rslt = dtype_to_ctype(rslt_dtype)
     name = "subdarray"
     operation = "-"
-    funcname = (name+'_'+left_dtype.name+'_'+
+    funcname = (name+'_'+str(id)+'_'+left_dtype.name+'_'+
                 right_dtype.name+'_'+rslt_dtype.name)
     
     if pitch:
@@ -452,12 +462,13 @@ def get_subarray_function(left_dtype, right_dtype, rslt_dtype, pitch = True):
 
 def get_subscalar_function(src_type, dest_type, pitch = True):
     global _kernels
+    id = cuda.Context.get_device().PCI_BUS_ID
     type_src = dtype_to_ctype(src_type)
     type_dest = dtype_to_ctype(dest_type)
     
     name = "subscalar"
     operation = "-"
-    funcname = name+'_'+src_type.name+'_'+dest_type.name
+    funcname = name+'_'+str(id)+'_'+src_type.name+'_'+dest_type.name
     
     if pitch:
         attname = 'pitch_'+funcname
@@ -495,12 +506,13 @@ def get_subscalar_function(src_type, dest_type, pitch = True):
 
 def get_scalarsub_function(src_type, dest_type, pitch = True):
     global _kernels
+    id = cuda.Context.get_device().PCI_BUS_ID
     type_src = dtype_to_ctype(src_type)
     type_dest = dtype_to_ctype(dest_type)
 
     name = "scalarsub"
     operation = "-"
-    funcname = name+'_'+src_type.name+'_'+dest_type.name
+    funcname = name+'_'+str(id)+'_'+src_type.name+'_'+dest_type.name
     
     if pitch:
         attname = 'pitch_'+funcname
@@ -538,13 +550,14 @@ def get_scalarsub_function(src_type, dest_type, pitch = True):
 
 def get_mularray_function(left_dtype, right_dtype, rslt_dtype, pitch = True):
     global _kernels
+    id = cuda.Context.get_device().PCI_BUS_ID
     type_left = dtype_to_ctype(left_dtype)
     type_right = dtype_to_ctype(right_dtype)
     type_rslt = dtype_to_ctype(rslt_dtype)
 
     name = "mularray"
     operation = "*"
-    funcname = (name+'_'+left_dtype.name+'_'+
+    funcname = (name+'_'+str(id)+'_'+left_dtype.name+'_'+
                 right_dtype.name+'_'+rslt_dtype.name)
     
     if pitch:
@@ -585,12 +598,13 @@ def get_mularray_function(left_dtype, right_dtype, rslt_dtype, pitch = True):
 
 def get_mulscalar_function(src_type, dest_type, pitch = True):
     global _kernels
+    id = cuda.Context.get_device().PCI_BUS_ID
     type_src = dtype_to_ctype(src_type)
     type_dest = dtype_to_ctype(dest_type)
     
     name = "mulscalar"
     operation = "*"
-    funcname = name+'_'+src_type.name+'_'+dest_type.name
+    funcname = name+'_'+str(id)+'_'+src_type.name+'_'+dest_type.name
     
     if pitch:
         attname = 'pitch_'+funcname
@@ -628,13 +642,14 @@ def get_mulscalar_function(src_type, dest_type, pitch = True):
 
 def get_divarray_function(left_dtype, right_dtype, rslt_dtype, pitch = True):
     global _kernels
+    id = cuda.Context.get_device().PCI_BUS_ID
     type_left = dtype_to_ctype(left_dtype)
     type_right = dtype_to_ctype(right_dtype)
     type_rslt = dtype_to_ctype(rslt_dtype)
 
     name = "divarray"
     operation = "/"
-    funcname = (name+'_'+left_dtype.name+'_'+
+    funcname = (name+'_'+str(id)+'_'+left_dtype.name+'_'+
                 right_dtype.name+'_'+rslt_dtype.name)
     
     if pitch:
@@ -675,12 +690,13 @@ def get_divarray_function(left_dtype, right_dtype, rslt_dtype, pitch = True):
 
 def get_divscalar_function(src_type, dest_type, pitch = True):
     global _kernels
+    id = cuda.Context.get_device().PCI_BUS_ID
     type_src = dtype_to_ctype(src_type)
     type_dest = dtype_to_ctype(dest_type)
     
     name = "divscalar"
     operation = "/"
-    funcname = name+'_'+src_type.name+'_'+dest_type.name
+    funcname = name+'_'+str(id)+'_'+src_type.name+'_'+dest_type.name
     
     if pitch:
         attname = 'pitch_'+funcname
@@ -718,12 +734,13 @@ def get_divscalar_function(src_type, dest_type, pitch = True):
 
 def get_scalardiv_function(src_type, dest_type, pitch = True):
     global _kernels
+    id = cuda.Context.get_device().PCI_BUS_ID
     type_src = dtype_to_ctype(src_type)
     type_dest = dtype_to_ctype(dest_type)
     
     name = "scalardiv"
     operation = "/"
-    funcname = name+'_'+src_type.name+'_'+dest_type.name
+    funcname = name+'_'+str(id)+'_'+src_type.name+'_'+dest_type.name
     
     if pitch:
         attname = 'pitch_'+funcname
@@ -761,12 +778,13 @@ def get_scalardiv_function(src_type, dest_type, pitch = True):
 
 def get_complex_function(real_type, imag_type, result_type, pitch = True):
     global _kernels
+    id = cuda.Context.get_device().PCI_BUS_ID
     type_real = dtype_to_ctype(real_type)
     type_imag = dtype_to_ctype(imag_type)
     type_result = dtype_to_ctype(result_type)
     
     name = "makecomplex"
-    funcname = (name+'_'+real_type.name+'_'+
+    funcname = (name+'_'+str(id)+'_'+real_type.name+'_'+
                 imag_type.name+'_'+result_type.name)
     
     if pitch:
