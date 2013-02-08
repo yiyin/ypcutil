@@ -248,6 +248,29 @@ _kernels = function_holder()
 
 
 def fft(d_A, econ = False):
+    """
+    Perform 1D fft on each row of d_A
+    can accept only 2D array
+    
+    Parameters
+    ----------
+    d_A : pycuda.gpuarray.GPUArray or parray.PitchArray
+        Input array, complex or real
+    econ : bool, optional
+        Only applies when d_A is real
+        If True, the output only contains half of the fft result,
+        the other half can be inferred.
+    
+    Returns
+    -------
+    out : same type as d_A
+        Each row containing the fft of corresponding to the input row.
+    
+    Note: 1) for batch job when size = d_A.ld-1, the result is incorrect
+            due to cufft bug. Bug reported.
+          2) The precision when econ = True when using GPUArray is
+            slightly worse than using PitchArray.
+    """
     if type(d_A) is parray.PitchArray:
         return _fft_parray(d_A, econ)
     elif type(d_A) is gpuarray.GPUArray:
@@ -256,6 +279,27 @@ def fft(d_A, econ = False):
         raise TypeError("FFT: Only PitchArray and GPUArray are supported")
 
 def _fft_gpuarray(d_A, econ = False):
+    """
+    Perform 1D fft on each row of d_A
+    can accept only 2D array
+    
+    Parameters
+    ----------
+    d_A : pycuda.gpuarray.GPUArray
+        Input array, complex or real
+    econ : bool, optional
+        Only applies when d_A is real
+        If True, the output only contains half of the fft result,
+        the other half can be inferred.
+    
+    Returns
+    -------
+    out : pycuda.gpuarray.GPUArray
+        Each row containing the fft of corresponding to the input row.
+        
+    Note: The precision when econ = True is slightly worse than
+        using PitchArray.
+    """
     ndim = len(d_A.shape)
     reshaped = False
     A = d_A
@@ -405,6 +449,49 @@ def ifft(d_A, econ = False, even_size = None,
     
     Parameters
     ----------
+    d_A : parray.PitchArray or pycuda.gpuarray.GPUArray
+        Input array, complex
+    econ : bool, optional
+        Whether the dft is stored in econ fashion in d_A.
+    even_size : bool or None, optional
+        Only effects when econ is True.
+        If None, the size of fft is inferred.
+        from element in d_A if d_A is real.
+        If True, size of fft is even, else odd.
+    scale : bool, optional
+        Whether to scale the ifft to true ifft results.
+        If false, the returned ifft is not normalize by N,
+        where N is the size of ifft.
+        If True, the ifft is normalized to be the true idft.
+    scalevalue : float or None, optioinal
+        Only takes effect when scale if True.
+        If None, scale to the default size 1/N.
+        If float, scale by value float.
+        
+    Returns
+    -------
+    out : same type as dd_A
+        If econ is True, returns real array
+        Otherwise, returns complex array.
+    """
+    if type(d_A) is parray.PitchArray:
+        return _ifft_parray(d_A, econ = econ, even_size = even_size,
+                            scale = scale, scalevalue = scalevalue)
+    elif type(d_A) is gpuarray.GPUArray:
+        return _ifft_gpuarray(d_A, econ = econ, even_size = even_size,
+                              scale = scale, scalevalue = scalevalue)
+    else:
+        raise TypeError("FFT: Only PitchArray and GPUArray are supported")
+
+
+def _ifft_parray(d_A, econ = False, even_size = None,
+         scale = True, scalevalue = None):
+    """
+    Perform 1D inverse fft on each row of d_A
+    can accept only 2D array, may be vector
+    
+    Parameters
+    ----------
     d_A : parray.PitchArray
         Input array, complex
     econ : bool, optional
@@ -445,7 +532,7 @@ def ifft(d_A, econ = False, even_size = None,
             A = d_A.reshape((1, max(A.shape)))
             reshaped = True
     else:
-        total_inputs = max(A.shape)
+        total_inputs = A.shape[0]
         if econ:
             if even_size is None:
                 even_size = _check_even_econ_1d(A, A.shape[1])
@@ -477,6 +564,101 @@ def ifft(d_A, econ = False, even_size = None,
             scalevalue = 1./size
         d_output *= scalevalue
     return d_output.reshape(d_A.shape) if reshaped else d_output
+
+
+def _ifft_gpuarray(d_A, econ = False, even_size = None,
+         scale = True, scalevalue = None):
+    """
+    Perform 1D inverse fft on each row of d_A
+    can accept only 2D array, may be vector
+    
+    Parameters
+    ----------
+    d_A : pycuda.gpuarray.GPUArray
+        Input array, complex
+    econ : bool, optional
+        Whether the dft is stored in econ fashion in d_A.
+    even_size : bool or None, optional
+        Only effects when econ is True.
+        If None, the size of fft is inferred.
+        from element in d_A if d_A is real.
+        If True, size of fft is even, else odd.
+    scale : bool, optional
+        Whether to scale the ifft to true ifft results.
+        If false, the returned ifft is not normalize by N,
+        where N is the size of ifft.
+        If True, the ifft is normalized to be the true idft.
+    scalevalue : float or None, optioinal
+        Only takes effect when scale if True.
+        If None, scale to the default size 1/N.
+        If float, scale by value float.
+        
+    Returns
+    -------
+    out : pycuda.gpuarray.GPUArray
+        If econ is True, returns real array
+        Otherwise, returns complex array.
+    """
+    ndim = len(d_A.shape)
+    reshaped = False
+    A = d_A
+    if ndim == 1:
+        total_inputs = 1
+        size = A.shape[0]
+    elif ndim == 2:
+        if any([b == 1 for b in A.shape]):
+            total_inputs = 1
+            if econ:
+                if even_size is None:
+                    even_size = _check_even_econ_1d(A, max(A.shape))
+                size = ((max(A.shape)-1)*2 if
+                        even_size else (max(A.shape)-1)*2+1)
+            else:
+                size = max(A.shape)
+            if A.shape[1] == 1:
+                A = d_A.reshape(1, size)
+                reshaped = True
+        else:
+            total_inputs = A.shape[0]
+            if econ:
+                if even_size is None:
+                    even_size = _check_even_econ_1d(A, A.shape[1])
+                size = ((A.shape[1]-1)*2 if 
+                        even_size else (A.shape[1]-1)*2+1)
+            else:
+                size = A.shape[1]
+    else:
+        raise ValueError(
+            "FFT: Only 1D and 2D array is supported for GPUArray")
+    
+    outdtype = parray.complextofloat(A.dtype) if econ else A.dtype        
+    d_output = gpuarray.empty((total_inputs, size), outdtype)
+    
+    batch_size = min(total_inputs, 128)
+    # Even for vectors d_output is alway of shape (1, size),
+    # so d_output.ld should be correct
+    plan = fftplan(size, A.dtype, A.shape[1], d_output.shape[1],
+                 forward = False, econ = econ,
+                 batch_size = batch_size)
+    for i in range(0, total_inputs, batch_size):
+        ntransform = min(batch_size, total_inputs-i)
+        if ntransform != batch_size:
+            del plan
+            plan = fftplan(size, A.dtype, A.shape[1], d_output.shape[1],
+                         forward = False, econ = econ,
+                         batch_size = ntransform)
+        plan.transform_p(int(A.gpudata) + i*A.shape[1]*A.dtype.itemsize,
+                         int(d_output.gpudata) + 
+                         i*outdtype.itemsize*d_output.shape[1])
+    del plan
+    if scale:
+        if scalevalue is None:
+            scalevalue = 1./size
+        d_output *= scalevalue
+    if ndim == 1:
+        return d_output.reshape(d_output.size)
+    else:
+        return d_output.reshape((d_output.size,1)) if reshaped else d_output
 
 
 def fft2(d_A, econ = False):
