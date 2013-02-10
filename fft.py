@@ -706,6 +706,8 @@ def _fft2_parray(d_A, econ = False):
     -------
     out : parray.PitchArray, complex
         Containing the fft of corresponding to the inputs.
+    
+    Note: content destroyed when econ = True
     """
     ndim = len(d_A.shape)
     if ndim == 2:
@@ -752,7 +754,7 @@ def _fft2_parray(d_A, econ = False):
     if realA and not econ:
         global _kernels
         id = cuda.Context.get_device().PCI_BUS_ID
-        func_name = 'get_2d'+'_'+str(id)+'_'+outdtype.name
+        func_name = 'get_2d'+'_'+str(id)+'_'+outdtype.name+'_'+str(ndim)
         if hasattr(_kernels, func_name):
             pad_func = getattr(_kernels, func_name)
         else:
@@ -825,13 +827,13 @@ def _fft2_gpuarray(d_A, econ = False):
                 forward = True, econ = realA, batch_size = ntransform, 
                 onembed = (1, size[1]) if realA and not econ else None)
         plan.transform_p(
-            int(A.gpudata) + i*input_total_elements*A.dtype.itemsize,
+            int(d_A.gpudata) + i*input_total_elements*d_A.dtype.itemsize,
             int(d_output.gpudata) + i*outdtype.itemsize*output_total_elements)
     del plan
     if realA and not econ:
         global _kernels
         id = cuda.Context.get_device().PCI_BUS_ID
-        func_name = 'get_2d'+'_'+str(id)+'_'+outdtype.name
+        func_name = 'get_2d'+'_'+str(id)+'_'+outdtype.name+'_'+str(ndim)
         if hasattr(_kernels, func_name):
             pad_func = getattr(_kernels, func_name)
         else:
@@ -840,7 +842,7 @@ def _fft2_gpuarray(d_A, econ = False):
         pad_func.prepared_call(
             (6*cuda.Context.get_device().MULTIPROCESSOR_COUNT, 1),
             (256, 1, 1), d_output.gpudata,
-            output_total_elements if ndim == 3 else outshape[-1]*outshape[-2],
+            output_total_elements if ndim == 3 else outshape[-1],
             size[1], size[0], total_inputs)
     return d_output
 
@@ -886,7 +888,7 @@ def ifft2(d_A, econ = False, even_size = None,
         return _ifft2_gpuarray(d_A, econ = econ, even_size = even_size,
                                scale = scale, scalevalue = scalevalue)
     else:
-        raise TypeError("FFT: Only PitchArray and GPUArray are supported")
+        raise TypeError("IFFT2: Only PitchArray and GPUArray are supported")
 
 
 def _ifft2_parray(d_A, econ = False, even_size = None,
@@ -924,7 +926,6 @@ def _ifft2_parray(d_A, econ = False, even_size = None,
         Otherwise, returns complex array.
     """
     ndim = len(d_A.shape)
-    
     if ndim == 2:
         total_inputs = 1
         if econ:
@@ -951,23 +952,23 @@ def _ifft2_parray(d_A, econ = False, even_size = None,
     
     batch_size = min(total_inputs, 128)
     plan = fftplan(size, d_A.dtype, d_A.ld, d_output.ld,
-                 forward = False, econ = econ,
-                 batch_size = batch_size,
-                 inembed = ((d_A.shape[0], d_A.ld) if
-                    ndim == 2 else (d_A.ld, d_A.shape[2])),
-                 onembed = ((d_output.shape[0], d_output.ld) if
-                            ndim == 2 else None))
+                   forward = False, econ = econ,
+                   batch_size = batch_size,
+                   inembed = ((1, d_A.ld) if
+                              ndim == 2 else (d_A.ld, d_A.shape[2])),
+                   onembed = ((1, d_output.ld) if
+                              ndim == 2 else None))
     for i in range(0, total_inputs, batch_size):
         ntransform = min(batch_size, total_inputs-i)
         if ntransform != batch_size:
             del plan
             plan = fftplan(size, d_A.dtype, d_A.ld, d_output.ld,
-                 forward = False, econ = econ,
-                 batch_size = ntransform,
-                 inembed = ((d_A.shape[0], d_A.ld) if
-                    ndim == 2 else (d_A.ld, d_A.shape[2])),
-                 onembed = ((d_output.shape[0], d_output.ld) if
-                            ndim == 2 else None))
+                           forward = False, econ = econ,
+                           batch_size = ntransform,
+                           inembed = ((1, d_A.ld) if
+                                      ndim == 2 else (d_A.ld, d_A.shape[2])),
+                           onembed = ((1, d_output.ld) if
+                                      ndim == 2 else None))
         plan.transform(d_A if ndim == 2 else d_A[i:i+ntransform],
                        d_output if ndim == 2 else d_output[i:i+ntransform])
     del plan
@@ -1013,7 +1014,6 @@ def _ifft2_gpuarray(d_A, econ = False, even_size = None,
         Otherwise, returns complex array.
     """
     ndim = len(d_A.shape)
-    
     if ndim == 2:
         total_inputs = 1
         if econ:
@@ -1036,11 +1036,10 @@ def _ifft2_gpuarray(d_A, econ = False, even_size = None,
         raise ValueError("Input to ifft2 must be 2D or 3D")
     outdtype = parray.complextofloat(d_A.dtype) if econ else d_A.dtype        
     d_output = (gpuarray.empty((total_inputs, size[0], size[1]), outdtype) if
-                    ndim == 3 else parray.empty(size, outdtype))
+                    ndim == 3 else gpuarray.empty(size, outdtype))
     
     input_total_elements = size[0]*(size[1]/2+1 if econ else size[1])
     output_total_elements = size[0]*size[1]
-    
     batch_size = min(total_inputs, 128)
     plan = fftplan(size, d_A.dtype, input_total_elements,
                    output_total_elements, forward = False,
@@ -1057,7 +1056,7 @@ def _ifft2_gpuarray(d_A, econ = False, even_size = None,
                            output_total_elements, forward = False,
                            econ = econ, batch_size = ntransform)
         plan.transform_p(
-            int(A.gpudata) + i*input_total_elements*A.dtype.itemsize,
+            int(d_A.gpudata) + i*input_total_elements*d_A.dtype.itemsize,
             int(d_output.gpudata) + i*outdtype.itemsize*output_total_elements)
     del plan
     if scale:
@@ -1076,7 +1075,7 @@ def fft3(d_A, econ = False, shape = None):
     elif type(d_A) is gpuarray.GPUArray:
         return _fft3_gpuarray(d_A, econ)
     else:
-        raise TypeError("FFT: Only PitchArray and GPUArray are supported")
+        raise TypeError("FFT3: Only PitchArray and GPUArray are supported")
 
 
 def _fft3_parray(d_A, shape, econ = False):
@@ -1140,7 +1139,7 @@ def _fft3_parray(d_A, shape, econ = False):
     if realA and not econ:
         global _kernels
         id = cuda.Context.get_device().PCI_BUS_ID
-        func_name = 'get_3d'+'_'+str(id)+'_'+outdtype.name
+        func_name = 'get_3d'+'_'+str(id)+'_'+outdtype.name+'_'+str(ndim)
         if hasattr(_kernels, func_name):
             pad_func = getattr(_kernels, func_name)
         else:
@@ -1223,13 +1222,13 @@ def _fft3_gpuarray(d_A, econ = False):
                 #           (d_output.ld, outshape[-2],
                 #            outshape[-1])))
         plan.transform_p(
-            int(A.gpudata) + i*input_total_elements*A.dtype.itemsize,
+            int(d_A.gpudata) + i*input_total_elements*d_A.dtype.itemsize,
             int(d_output.gpudata) + i*outdtype.itemsize*output_total_elements)
     del plan
     if realA and not econ:
         global _kernels
         id = cuda.Context.get_device().PCI_BUS_ID
-        func_name = 'get_3d'+'_'+str(id)+'_'+outdtype.name
+        func_name = 'get_3d'+'_'+str(id)+'_'+outdtype.name+'_'+str(ndim)
         if hasattr(_kernels, func_name):
             pad_func = getattr(_kernels, func_name)
         else:
@@ -1255,7 +1254,7 @@ def ifft3(d_A, econ = False, even_size = None,
         return _ifft3_gpuarray(d_A, econ = econ, even_size = even_size,
                                scale = scale, scalevalue = scalevalue)
     else:
-        raise TypeError("FFT: Only PitchArray and GPUArray are supported")
+        raise TypeError("FFT3: Only PitchArray and GPUArray are supported")
 
 
 def _ifft3_parray(d_A, shape, econ = False, even_size = None,
@@ -1390,8 +1389,8 @@ def _ifft3_gpuarray(d_A, econ = False, even_size = None,
         raise ValueError("GPUArray Input to ifft3 must be 3D or 4D")
     outdtype = parray.complextofloat(d_A.dtype) if econ else d_A.dtype        
     d_output = (
-        parray.empty((total_inputs, size[0], size[1], size[2]), outdtype) if
-        ndim == 4 else parray.empty(size, outdtype))
+        gpuarray.empty((total_inputs, size[0], size[1], size[2]), outdtype) if
+        ndim == 4 else gpuarray.empty(size, outdtype))
     
     input_total_elements = size[0]*size[1]*(size[2]/2+1 if econ else size[2])
     output_total_elements = size[0]*size[1]*size[2]
@@ -1417,7 +1416,7 @@ def _ifft3_gpuarray(d_A, econ = False, even_size = None,
                            forward = False, econ = econ,
                            batch_size = ntransform)
         plan.transform_p(
-            int(A.gpudata) + i*input_total_elements*A.dtype.itemsize,
+            int(d_A.gpudata) + i*input_total_elements*d_A.dtype.itemsize,
             int(d_output.gpudata) + i*outdtype.itemsize*output_total_elements)
     del plan
     if scale:
