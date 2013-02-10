@@ -623,7 +623,7 @@ def get_mulscalar_function(src_type, dest_type, pitch = True):
                           np.intp, np.int32, _get_type(dest_type)])
             setattr(_kernels, attname, func)
     else:
-        attname = 'pitch_'+funcname
+        attname = 'nonpitch_'+funcname
         if hasattr(_kernels, attname):
             func = getattr(_kernels, attname)
         else:
