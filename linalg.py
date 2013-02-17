@@ -12,11 +12,26 @@ import parray
 
 
 """ assuming row major storage as in PitchArray """
+class cublashandle(object):
+    def __init__(self):
+        self.handle = None
+        self.create()
+        
+    def create(self):
+        if self.handle is None:
+            self.handle = cublas.cublasCreate()
+        
+    def destroy(self):
+        if self.handle is not None:
+            cublas.cublasDestroy(self.handle)
+    
+    def __del__(self):
+        self.destroy()
 
 
 def dot(A, B, opa = 'n', opb = 'n',
         C = None, Cstart = None,
-        scale = 1.0, Cscale = 0.0):
+        scale = 1.0, Cscale = 0.0, handle = None):
     """
     Multiplication of two matrices A and B in PitchArray format
     if C is specified, use the memory in C.
@@ -128,7 +143,7 @@ def dot(A, B, opa = 'n', opb = 'n',
     conjC = False
     
     itemsize = C.dtype.itemsize
-    
+    handlestr = ", handle = handle.handle)"
     if m == 1:
         if n == 1:
             #alpha = A.get()[0,0]
@@ -146,10 +161,10 @@ def dot(A, B, opa = 'n', opb = 'n',
             C*=Cscale
             if opb in ['c','C']:
                 func = (tp+"axpy(l, alpha*scale, parray.conj(B).gpudata, 1,"
-                        + "int(C.gpudata)+Cstart*itemsize, 1)")
+                        + "int(C.gpudata)+Cstart*itemsize, 1" + handlestr)
             else:
                 func = (tp+"axpy(l, alpha*scale, B.gpudata, 1, "
-                        + "int(C.gpudata)+Cstart*itemsize, 1)")
+                        + "int(C.gpudata)+Cstart*itemsize, 1" + handlestr)
         else:
             if l > 1:
                 alpha = scale
@@ -159,7 +174,8 @@ def dot(A, B, opa = 'n', opb = 'n',
                     conjA = True
                 func = (tp+"gemv('"+opb+"',B.shape[1], B.shape[0], "
                         + "alpha, B.gpudata, B.ld, A.gpudata, 1, beta, "
-                        + "int(C.gpudata) + Cstart * itemsize * C.ld, 1)")
+                        + "int(C.gpudata) + Cstart * itemsize * C.ld, 1" 
+                        + handlestr)
             else:
                 if opa in ['c','C']:
                     if opb in ['c', 'C']:
@@ -168,20 +184,20 @@ def dot(A, B, opa = 'n', opb = 'n',
                         #        +").conj())")
                         func = ("C.set(np.array(scale*" + tp
                                 + "dotu(n, A.gpudata, 1, B.gpudata, 1)"
-                                +").conj()+C.get()*Cscale)")
+                                +").conj()+C.get()*Cscale" + handlestr)
                     else:
                         #func = ("C.set(np.array(" + tp
                         #        + "dotc(n, A.gpudata, 1, B.gpudata, 1)"
                         #        +"))")
                         func = ("C.set(np.array(scale*" + tp
                                 + "dotc(n, A.gpudata, 1, B.gpudata, 1)"
-                                +") + C.get()*Cscale)")
+                                +") + C.get()*Cscale" + handlestr)
                 elif opb in ['c', 'C']:
                     #func = ("C.set(np.array(" + tp
                     #        + "dotc(n, B.gpudata, 1, A.gpudata, 1)" +"))")
                     func = ("C.set(np.array(scale*" + tp
                             + "dotc(n, B.gpudata, 1, A.gpudata, 1)"
-                            +") + C.get()*Cscale)")
+                            +") + C.get()*Cscale" + handlestr)
                 else:
                     if complex_type:
                         #func = ("C.set(np.array(" + tp
@@ -189,14 +205,14 @@ def dot(A, B, opa = 'n', opb = 'n',
                         #        +"))")
                         func = ("C.set(np.array(scale*" + tp
                                 + "dotu(n, A.gpudata, 1, B.gpudata, 1)"
-                                +") + C.get()*Cscale)")
+                                +") + C.get()*Cscale" + handlestr)
                     else:
                         #func = ("C.set(np.array(" + tp
                         #        + "dot(n, A.gpudata, 1, B.gpudata, 1)"
                         #        +"))")
                         func = ("C.set(np.array(scale*" + tp
                                 + "dot(n, A.gpudata, 1, B.gpudata, 1)"
-                                +") + C.get()*Cscale)")
+                                +") + C.get()*Cscale" + handlestr)
     else:#m!=1
         if n == 1:
             if l == 1:
@@ -216,10 +232,10 @@ def dot(A, B, opa = 'n', opb = 'n',
                 if opa in ['c','C']:
                     func = (tp+"axpy(m, alpha*scale, "
                             + "parray.conj(A).gpudata, 1, "
-                            + "int(C.gpudata)+Cstart*itemsize, 1)")
+                            + "int(C.gpudata)+Cstart*itemsize, 1" + handlestr)
                 else:
                     func = (tp+"axpy(m, alpha*scale, A.gpudata, 1, "
-                            + "int(C.gpudata)+Cstart*itemsize, 1)")
+                            + "int(C.gpudata)+Cstart*itemsize, 1" + handlestr)
             else:
                 #C.fill(0)
                 C*=Cscale
@@ -230,26 +246,26 @@ def dot(A, B, opa = 'n', opb = 'n',
                         print l, m, scale, C.shape
                         func = (tp + "gerc(l, m, scale, B.gpudata, 1, "
                                 + "A.gpudata, 1, int(C.gpudata) + "
-                                + "Cstart * itemsize * C.ld, C.ld)")
+                                + "Cstart * itemsize * C.ld, C.ld" + handlestr)
                     else:
                         func = (tp + "gerc(l, m, scale, B.gpudata, 1, "
                                 + "A.gpudata, 1, int(C.gpudata) + "
-                                + "Cstart * itemsize * C.ld, C.ld)")
+                                + "Cstart * itemsize * C.ld, C.ld" + handlestr)
                 elif opb in ['c', 'C']:
                     B.conj()
                     conjB = True
                     func = (tp + "geru(l, m, scale, B.gpudata, 1, "
                             + "A.gpudata, 1, int(C.gpudata) + "
-                            + "Cstart * itemsize * C.ld, C.ld)")
+                            + "Cstart * itemsize * C.ld, C.ld" + handlestr)
                 else:
                     if complex_type:
                         func = (tp + "geru(l, m, scale, B.gpudata, 1, "
                                 + "A.gpudata, 1, int(C.gpudata) + "
-                                + "Cstart * itemsize * C.ld, C.ld)")
+                                + "Cstart * itemsize * C.ld, C.ld" + handlestr)
                     else:
                         func = (tp + "ger(l, m, scale, B.gpudata, 1, "
                                 + "A.gpudata, 1, int(C.gpudata) + "
-                                + "Cstart * itemsize * C.ld, C.ld)")
+                                + "Cstart * itemsize * C.ld, C.ld" + handlestr)
         else:
             if l == 1:
                 if opb in ['c', 'C']:
@@ -261,7 +277,7 @@ def dot(A, B, opa = 'n', opb = 'n',
                         func = (tp + "gemv('n', A.shape[1], A.shape[0], "
                                 + "scale, A.gpudata, A.ld, B.gpudata, 1, "
                                 + "Cscale, int(C.gpudata) + "
-                                + "Cstart * itemsize * C.ld, 1)")
+                                + "Cstart * itemsize * C.ld, 1" + handlestr)
                     else:
                         B.conj()
                         conjB = True
@@ -273,7 +289,7 @@ def dot(A, B, opa = 'n', opb = 'n',
                         func = (tp + "gemv('" + opa + "', A.shape[1], "
                                 + "A.shape[0], scale, A.gpudata, A.ld, "
                                 + "B.gpudata, 1, Cscale, int(C.gpudata) + "
-                                + "Cstart * itemsize * C.ld, 1)")
+                                + "Cstart * itemsize * C.ld, 1" + handlestr)
                 else:
                     if opa in ['c', 'C']:
                         B.conj()
@@ -285,7 +301,7 @@ def dot(A, B, opa = 'n', opb = 'n',
                         func = (tp + "gemv('n', A.shape[1], A.shape[0], "
                                 + "scale, A.gpudata, A.ld, B.gpudata, 1, "
                                 + "Cscale, int(C.gpudata) + "
-                                + "Cstart * itemsize * C.ld, 1)")
+                                + "Cstart * itemsize * C.ld, 1" + handlestr)
                     else:
                         if opa in ['t', 'T']:
                             opa = 'n'
@@ -294,14 +310,16 @@ def dot(A, B, opa = 'n', opb = 'n',
                         func = (tp + "gemv('" + opa + "', A.shape[1], "
                                 + "A.shape[0], scale, A.gpudata, A.ld, "
                                 + "B.gpudata, 1, Cscale, int(C.gpudata) "
-                                + "+ Cstart * itemsize * C.ld, 1)")
+                                + "+ Cstart * itemsize * C.ld, 1" + handlestr)
             else:
                 func = (tp+"gemm('" + opb + "','" + opa + "', l, m, k, "
                         + "scale, B.gpudata, B.ld, A.gpudata, A.ld, "
                         + "Cscale, int(C.gpudata) + "
-                        + "Cstart * itemsize * C.ld, C.ld)")
-    if cublas._libcublas_ctx is None:
-        cublas.cublasInit()
+                        + "Cstart * itemsize * C.ld, C.ld" + handlestr)
+    #if cublas._libcublas_ctx is None:
+    #    cublas.cublasInit()
+    if handle is None:
+        handle = cublashandle()
     eval(func)
     
     if conjC:
@@ -313,7 +331,32 @@ def dot(A, B, opa = 'n', opb = 'n',
     if conjB:
         B.conj()
     return C
-        
+
+
+def norm(A, handle = None):
+    """
+    computes the l2 norm of a vector A
+    
+    Parameters
+    ----------
+    A : parray.PitchArray
+        a one dimensional vector
+    handle : cublashandle, optional
+        handle to cublas
+    """
+    if handle is None:
+        handle = cublashandle()
+    dtype = A.dtype
+    if dtype == np.float64:
+        nrmfunc = cublas.cublasDnrm2
+    elif dtype == np.complex128:
+        nrmfunc = cublas.cublasDznrm2
+    elif dtype == np.float32:
+        nrmfunc = cublas.cublasSnrm2
+    elif dtype == np.complex64:
+        nrmfunc = cublas.cublasScnrm2
+    result = nrmfunc(A.size, A.gpudata, 1, handle = handle.handle)
+    return result
 
 def svd(G, compute_u = True, compute_v = True, econ = False):
     """
@@ -497,7 +540,7 @@ def pinv(G, rcond = 1e-4):
     """
     U,S,V = svd(G, econ=1)
     rcond = S.dtype.type(rcond)
-    sv_func = get_svinv_kernel(S.dtype, V.dtype)
+    sv_func = _get_svinv_kernel(S.dtype, V.dtype)
     sv_func.prepared_call(
         (S.size, 1), (256,1,1), S.gpudata, V.gpudata,
         V.ld, V.shape[1], rcond)
@@ -532,7 +575,7 @@ def solve_eq(G, q, rcond = 1e-4):
     U,S,V = svd(G, econ=1)
     qq = dot(U, q, opa='c')
     rcond = S.dtype.type(rcond)
-    sq_func = get_sq_kernel(S.dtype, qq.dtype)
+    sq_func = _get_sq_kernel(S.dtype, qq.dtype)
     sq_func.prepared_call(
         (6 * cuda.Context.get_device().MULTIPROCESSOR_COUNT, 1),
         (256,1,1), S.gpudata, qq.gpudata, rcond, S.size)
@@ -576,7 +619,7 @@ def solve_eq_sym(G, q, rcond = 1e-4):
     qq = dot(U, q, opa='c')
     rcond = S.dtype.type(rcond)
     
-    sq_func = get_sq_kernel(S.dtype, qq.dtype)
+    sq_func = _get_sq_kernel(S.dtype, qq.dtype)
     sq_func.prepared_call(
         (6 * cuda.Context.get_device().MULTIPROCESSOR_COUNT, 1),
         (256,1,1), S.gpudata, qq.gpudata, rcond, S.size)
@@ -678,7 +721,7 @@ def eig_sym(G, compute_z = True, uplo = 'U'):
 def add_eye(A, scale):
     if A.shape[0] != A.shape[1]:
         raise ValueError("A must be square matrix")
-    func = get_add_eye_func(A.dtype)
+    func = _get_add_eye_func(A.dtype)
     func.prepared_call(
         (6 * cuda.Context.get_device().MULTIPROCESSOR_COUNT, 1),
         (256,1,1), A.gpudata, A.ld, scale, A.shape[0])
@@ -692,21 +735,14 @@ def FISTA_l2(A, b, L = 1, steps=5000):
     t_k = 1
     t_km1 = 1
     xkm1 = xk.copy()
-    
-    #c = dot(A,b,opa='t')
-    if b.dtype == np.float64:
-        normfunc = cublas.cublasDnrm2
-    else:
-        normfunc = cublas.cublasSnrm2
-    
     x_steps = steps/20
-    
+    handle = cublashandle()
     start = time.time()
     
     for i in range(1,steps+1):
         yk = xk + ((t_km1-1)/t_k)*(xk-xkm1)
-        err = dot(A,yk) - b
-        temp = dot(A,err, opa='t')
+        err = dot(A, yk, handle = handle) - b
+        temp = dot(A, err, handle = handle, opa='t')
         xkm1 = xk.copy()
         xk = yk - temp / L
         
@@ -715,7 +751,7 @@ def FISTA_l2(A, b, L = 1, steps=5000):
         t_k = t_kp1
         
         if i%x_steps == 0:
-            ynorm = normfunc(err.size, err.gpudata, 1)
+            ynorm = la.norm(err, handle = handle)
             print "%d, norm = %.10f, time=%f(ms)" % (
                   i / x_steps, ynorm, (time.time()-start)*1000)
     return xk
@@ -737,35 +773,29 @@ def fista_l2_mpi(A, b, rank, diag, groupsize, col_comm,
     x_steps = steps / XOUTPUTSTEPS
     
     L = float(L)
-    
     d_xk = parray.zeros_like(b)
     t_k = 1.
     t_km1 = 1.
     d_xkm1 = d_xk.copy()
     
     grid = (6 * cuda.Context.get_device().MULTIPROCESSOR_COUNT, 1)
-    
+    handle = cublashandle()
     d_err = parray.empty_like(b)
 
     if d_err.dtype == np.float64:
-        normfunc = cublas.cublasDnrm2
         mpitype = MPI.DOUBLE
     else:
-        normfunc = cublas.cublasSnrm2
         mpitype = MPI.FLOAT
-    
     yk = np.zeros((A.shape[1], 1), A.dtype)
     d_yk = parray.empty_like(yk)
-    
     err = np.zeros((A.shape[0],1), A.dtype)
     d_err = parray.empty_like(err)
     
     if diag:
         temp_all = np.zeros((b.size*groupsize, 1), A.dtype)
         d_temp_all = parray.empty_like(temp_all)
-        update_err_func = get_fista_err_func(A.dtype)
-        update_xk_func = get_fista_update_func(A.dtype)
-        
+        update_err_func = _get_fista_err_func(A.dtype)
+        update_xk_func = _get_fista_update_func(A.dtype)
         ynorm = np.zeros(1, A.dtype)
         recv = np.zeros(1, A.dtype)
 
@@ -776,10 +806,9 @@ def fista_l2_mpi(A, b, rank, diag, groupsize, col_comm,
         if diag:
             d_yk = d_xk + ((t_km1-1)/t_k)*(d_xk-d_xkm1)
             yk = d_yk.get()
-        
         col_comm.Bcast(yk, root = row_rank)
         d_yk.set(yk)
-        d_temp = dot(A, d_yk)
+        d_temp = dot(A, d_yk, handle = handle)
         temp = d_temp.get()
         
         row_comm.Gather(
@@ -793,11 +822,10 @@ def fista_l2_mpi(A, b, rank, diag, groupsize, col_comm,
                 grid, (256,1,1), d_err.gpudata, b.gpudata,
                 d_temp_all.gpudata, b.size, groupsize)
             err = d_err.get()
-            ynorm[0] = normfunc(d_err.size, d_err.gpudata, 1)**2
-        
+            ynorm[0] = norm(d_err, handle = handle)**2
         row_comm.Bcast(err, root = col_rank)
         d_err.set(err)
-        d_temp = dot(A, d_err, opa='t')
+        d_temp = dot(A, d_err, opa='t', handle = handle)
         temp = d_temp.get()
         col_comm.Gather(
             [temp, temp.size, mpitype],
@@ -806,7 +834,6 @@ def fista_l2_mpi(A, b, rank, diag, groupsize, col_comm,
         
         if diag:
             d_temp_all.set(temp_all)
-            #d_xkm1 = d_xk.copy()
             cuda.memcpy_dtod(d_xkm1.gpudata, d_xk.gpudata,
                              d_xk.size*d_xk.dtype.itemsize)
             update_xk_func.prepared_call(
@@ -824,7 +851,7 @@ def fista_l2_mpi(A, b, rank, diag, groupsize, col_comm,
                           (MPI.Wtime()-start)*1000)
     return d_xk
         
-def get_fista_err_func(dtype):
+def _get_fista_err_func(dtype):
     template = """
 __global__ void err_update( %(type)s* err, %(type)s* b,
                             %(type)s* Ax, int size, int groupsize)
@@ -851,7 +878,7 @@ __global__ void err_update( %(type)s* err, %(type)s* b,
     return func
 
 
-def get_fista_update_func(dtype):
+def _get_fista_update_func(dtype):
     template = """
 __global__ void update(%(type)s* xk, %(type)s* yk, %(type)s* temp,
                        int size, int groupsize, %(type)s L)
@@ -878,7 +905,7 @@ __global__ void update(%(type)s* xk, %(type)s* yk, %(type)s* temp,
     return func
 
 
-def get_sq_kernel(dtype_s, dtype_q):
+def _get_sq_kernel(dtype_s, dtype_q):
     template = """
 #include <pycuda/pycuda-complex.hpp>
 
@@ -920,7 +947,7 @@ sq_Kernel(%(types)s* d_S, %(typeq)s* d_q, %(types)s rcond, int size)
                  np.int32])
     return func
 
-def get_eigsq_kernel(dtype_s, dtype_q):       
+def _get_eigsq_kernel(dtype_s, dtype_q):       
     template = """
 #include <pycuda/pycuda-complex.hpp>
 
@@ -957,7 +984,7 @@ eigsq_Kernel(%(types)s* d_S, %(typeq)s* d_q, %(types)s thres, int size)
     return func
 
 
-def get_sinv_kernel(dtype):
+def _get_sinv_kernel(dtype):
     template = """
 #include <pycuda/pycuda-complex.hpp>
 
@@ -997,7 +1024,7 @@ sinv_Kernel(%(types)s* d_S, %(types)s rcond, int size)
     return func
 
 
-def get_svinv_kernel(dtype_s, dtype_v):
+def _get_svinv_kernel(dtype_s, dtype_v):
     template = """
 #include <pycuda/pycuda-complex.hpp>
 
@@ -1041,7 +1068,7 @@ svinv_Kernel(%(types)s* d_S, %(typev)s* d_V, int ld,
     return func
 
 
-def get_add_eye_func(dtype):
+def _get_add_eye_func(dtype):
     template = """
 __global__ void adddiag(%(type)s* A, int ld, %(type)s value, int N)
 {
