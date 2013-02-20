@@ -1731,6 +1731,10 @@ class PitchArray(object):
                 if step != 1:
                     raise NotImplementedError("non-consecutive slicing is "
                                               "not implemented yet")
+        elif isinstance(idx, int):
+            start = idx
+            stop = idx + 1
+            step = 1
         else:
             raise ValueError("non-slice indexing not supported: %s" % (idx,))
         
