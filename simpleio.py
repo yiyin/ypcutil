@@ -31,7 +31,8 @@ def file_attr(filename):
     
 
 def write_memory_to_file(A, filename, mode = 'w',
-                         title='test', complevel = None):
+                         title = 'test', complevel = None,
+                         verbose = True):
     """
     write memory to a h5 file
     h5 file contains root.real and root.imag(if A complex)
@@ -96,10 +97,15 @@ def write_memory_to_file(A, filename, mode = 'w',
         h5file.root.real.append(B)
 
     h5file.close()
-    print "file %s created" % (filename)
+    if verbose:
+        if mode == 'w':
+            print "file %s created" % (filename)
+        else:
+            print "file %s attached" % (filename)
 
 
-def write_array(A, filename, mode = 'w', title='test', complevel=None):
+def write_array(A, filename, mode = 'w', title = 'test',
+                complevel = None, verbose = True):
     """
     write memory to a h5 file
     h5 file contains root.arrat(A real or complex)
@@ -161,10 +167,11 @@ def write_array(A, filename, mode = 'w', title='test', complevel=None):
                                 tuple(shape), filters = filters)
     h5file.root.array.append(B)
     h5file.close()
-    if mode == 'w':
-        print "file %s created" % (filename)
-    else:
-        print "file %s attached" % (filename)
+    if verbose:
+        if mode == 'w':
+            print "file %s created" % (filename)
+        else:
+            print "file %s attached" % (filename)
 
 
 def read_file(filename, start = None, stop = None, step = 1):
