@@ -4,75 +4,46 @@
 import numpy as np
 import pycuda.driver as cuda
 from pycuda.compiler import SourceModule
-from pycuda.tools import dtype_to_ctype
-
-
-# This class is just to facilitate memorizing all kernels
-# that has been compiled.
-class function_holder(object):
-    def __init__(self):
-        pass
-
-
-_kernels = function_holder()
+from pycuda.tools import dtype_to_ctype, context_dependent_memoize
 
 
 def _get_type(dtype):
     return dtype.type if isinstance(dtype, np.dtype) else dtype
 
 
+@context_dependent_memoize
 def get_fill_function(dtype, pitch = True):
-    global _kernels
-    id = cuda.Context.get_device().PCI_BUS_ID
     type_dst = dtype_to_ctype(dtype)
     name = "fill"
-    funcname = name+'_'+str(id)+'_'+dtype.name
     
     if pitch:
-        attname = 'pitch_'+funcname
-        if hasattr(_kernels, attname):
-            func = getattr(_kernels, attname)
-        else:
-            func = SourceModule(
-                fill_pitch_template % {
+        func = SourceModule(
+            fill_pitch_template % {
                     "name": name,
                     "type_dst": type_dst
-                },
-                options=["--ptxas-options=-v"]).get_function(name)
-            func.prepare(
-                [np.int32, np.int32, np.intp, np.int32, _get_type(dtype)])
-            setattr(_kernels, attname, func)
+            }, options=["--ptxas-options=-v"]).get_function(name)
+        func.prepare(
+            [np.int32, np.int32, np.intp, np.int32, _get_type(dtype)])
     else:
-        attname = 'nonpitch_'+funcname
-        if hasattr(_kernels, attname):
-            func = getattr(_kernels, attname)
-        else:
-            func = SourceModule(
+        func = SourceModule(
                 fill_nonpitch_template % {
                     "name": name,
                     "type_dst": type_dst
                 },
                 options=["--ptxas-options=-v"]).get_function(name)
-            func.prepare([np.int32, np.intp, _get_type(dtype)])
-            setattr(_kernels, attname, func)
+        func.prepare([np.int32, np.intp, _get_type(dtype)])
     return func
 
 
+@context_dependent_memoize
 def get_astype_function(dtype_dest, dtype_src, pitch = True):
-    global _kernels
-    id = cuda.Context.get_device().PCI_BUS_ID
     type_dest = dtype_to_ctype(dtype_dest)
     type_src = dtype_to_ctype(dtype_src)
     name = "astype"
     operation = ""
-    funcname = name+'_'+str(id)+'_'+dtype_src.name+'_'+dtype_dest.name
     
     if pitch:
-        attname = 'pitch_'+funcname
-        if hasattr(_kernels, attname):
-            func = getattr(_kernels, attname)
-        else:
-            func = SourceModule(
+        func = SourceModule(
                 pitch_template % {
                     "name": name,
                     "dest_type": type_dest,
@@ -80,15 +51,10 @@ def get_astype_function(dtype_dest, dtype_src, pitch = True):
                     "operation": operation,
                 },
                 options=["--ptxas-options=-v"]).get_function(name)
-            func.prepare(
+        func.prepare(
                 [np.int32, np.int32, np.intp, np.int32, np.intp, np.int32])
-            setattr(_kernels, attname, func)
     else:
-        attname = 'nonpitch_'+funcname
-        if hasattr(_kernels, attname):
-            func = getattr(_kernels, attname)
-        else:
-            func = SourceModule(
+        func = SourceModule(
                 non_pitch_template % {
                     "name": name,
                     "dest_type": type_dest,
@@ -96,16 +62,13 @@ def get_astype_function(dtype_dest, dtype_src, pitch = True):
                     "operation": operation,
                 },
                 options=["--ptxas-options=-v"]).get_function(name)
-            func.prepare([np.intp, np.intp, np.int32])
-            setattr(_kernels, attname, func)
+        func.prepare([np.intp, np.intp, np.int32])
     return func
 
-    
+
+@context_dependent_memoize    
 def get_realimag_function(dtype, real = True, pitch = True):
-    global _kernels
-    id = cuda.Context.get_device().PCI_BUS_ID
     type_src = dtype_to_ctype(dtype)
-    funcname = name+'_'+str(id)+'_'+dtype.name
     
     if dtype == np.complex64:
         type_dest = "float"
@@ -128,11 +91,7 @@ def get_realimag_function(dtype, real = True, pitch = True):
                         "numpy.complex64 or numpy.complex128")
     
     if pitch:
-        attname = 'pitch_'+funcname
-        if hasattr(_kernels, attname):
-            func = getattr(_kernels, attname)
-        else:
-            func = SourceModule(
+        func = SourceModule(
                 pitch_template % {
                     "name": name,
                     "dest_type": type_dest,
@@ -140,15 +99,10 @@ def get_realimag_function(dtype, real = True, pitch = True):
                     "operation": operation,
                 },
                 options=["--ptxas-options=-v"]).get_function(name)
-            func.prepare(
+        func.prepare(
                 [np.int32, np.int32, np.intp, np.int32, np.intp, np.int32])
-            setattr(_kernels, attname, func)
     else:
-        attname = 'nonpitch_'+funcname
-        if hasattr(_kernels, attname):
-            func = getattr(_kernels, attname)
-        else:
-            func = SourceModule(
+        func = SourceModule(
                 non_pitch_template % {
                     "name": name,
                     "dest_type": type_dest,
@@ -156,14 +110,12 @@ def get_realimag_function(dtype, real = True, pitch = True):
                     "operation": operation,
                 },
                 options=["--ptxas-options=-v"]).get_function(name)
-            func.prepare([np.intp, np.intp, np.int32])
-            setattr(_kernels, attname, func)
+        func.prepare([np.intp, np.intp, np.int32])
     return func
 
 
+@context_dependent_memoize
 def get_abs_function(dtype, pitch = True):
-    global _kernels
-    id = cuda.Context.get_device().PCI_BUS_ID
     type_src = dtype_to_ctype(dtype)
     if dtype == np.complex128:
         operation = "pycuda::abs"
@@ -181,14 +133,9 @@ def get_abs_function(dtype, pitch = True):
         operation = "abs"
         type_dest = dtype_to_ctype(dtype)
     name = "abs_function"
-    funcname = name+'_'+str(id)+'_'+dtype.name
     
     if pitch:
-        attname = 'pitch_'+funcname
-        if hasattr(_kernels, attname):
-            func = getattr(_kernels, attname)
-        else:
-            func = SourceModule(
+        func = SourceModule(
                 pitch_template % {
                     "name": name,
                     "dest_type": type_dest,
@@ -196,15 +143,10 @@ def get_abs_function(dtype, pitch = True):
                     "operation": operation,
                 },
                 options=["--ptxas-options=-v"]).get_function(name)
-            func.prepare(
+        func.prepare(
                 [np.int32, np.int32, np.intp, np.int32, np.intp, np.int32])
-            setattr(_kernels, attname, func)
     else:
-        attname = 'nonpitch_'+funcname
-        if hasattr(_kernels, attname):
-            func = getattr(_kernels, attname)
-        else:
-            func = SourceModule(
+        func = SourceModule(
                 non_pitch_template % {
                     "name": name,
                     "dest_type": type_dest,
@@ -212,14 +154,12 @@ def get_abs_function(dtype, pitch = True):
                     "operation": operation,
                 },
                 options=["--ptxas-options=-v"]).get_function(name)
-            func.prepare([np.intp, np.intp, np.int32])
-            setattr(_kernels, attname, func)
+        func.prepare([np.intp, np.intp, np.int32])
     return func
 
 
+@context_dependent_memoize
 def get_conj_function(dtype, pitch = True):
-    global _kernels
-    id = cuda.Context.get_device().PCI_BUS_ID
     type_src = dtype_to_ctype(dtype)
     if dtype == np.complex128:
         operation = "pycuda::conj"
@@ -229,14 +169,9 @@ def get_conj_function(dtype, pitch = True):
         raise TypeError("Only complex arrays are allowed "
                         "to perform conjugation")
     name = "conj"
-    funcname = name+'_'+str(id)+'_'+dtype.name
     
     if pitch:
-        attname = 'pitch_'+funcname
-        if hasattr(_kernels, attname):
-            func = getattr(_kernels, attname)
-        else:
-            func = SourceModule(
+        func = SourceModule(
                 pitch_template % {
                     "name": name,
                     "dest_type": type_src,
@@ -244,15 +179,10 @@ def get_conj_function(dtype, pitch = True):
                     "operation": operation,
                 },
                 options=["--ptxas-options=-v"]).get_function(name)
-            func.prepare(
+        func.prepare(
                 [np.int32, np.int32, np.intp, np.int32, np.intp, np.int32])
-            setattr(_kernels, attname, func)
     else:
-        attname = 'nonpitch_'+funcname
-        if hasattr(_kernels, attname):
-            func = getattr(_kernels, attname)
-        else:
-            func = SourceModule(
+        func = SourceModule(
                 non_pitch_template % {
                     "name": name,
                     "dest_type": type_src,
@@ -260,23 +190,15 @@ def get_conj_function(dtype, pitch = True):
                     "operation": operation,
                 },
                 options=["--ptxas-options=-v"]).get_function(name)
-            func.prepare([np.intp, np.intp, np.int32])
-            setattr(_kernels, attname, func)
+        func.prepare([np.intp, np.intp, np.int32])
     return func
 
 
+@context_dependent_memoize
 def get_resize_function(dtype):
-    global _kernels
-    id = cuda.Context.get_device().PCI_BUS_ID
     type_src = dtype_to_ctype(dtype)
     name = "resize"
-    funcname = name+'_'+str(id)+'_'+dtype.name
-    
-    attname = 'pitch_'+funcname
-    if hasattr(_kernels, attname):
-        func = getattr(_kernels, attname)
-    else:
-        func = SourceModule(
+    func = SourceModule(
             reshape_template % {
                 "name": name,
                 "dest_type": type_src,
@@ -284,19 +206,16 @@ def get_resize_function(dtype):
                 "operation": "",
             },
             options=["--ptxas-options=-v"]).get_function(name)
-        func.prepare([np.int32, np.int32, np.int32, np.int32,
-                      np.intp, np.int32, np.intp, np.int32])
-        setattr(_kernels, attname, func)
+    func.prepare([np.int32, np.int32, np.int32, np.int32,
+                  np.intp, np.int32, np.intp, np.int32])
     return func
 
 
+@context_dependent_memoize
 def get_transpose_function(dtype, conj = False):
-    global _kernels
-    id = cuda.Context.get_device().PCI_BUS_ID
     src_type = dtype_to_ctype(dtype)
     name = "trans"
     operation = ""
-    funcname = name+'_'+str(id)+'_'+dtype.name
     
     if conj:
         if dtype == np.complex128:
@@ -304,42 +223,30 @@ def get_transpose_function(dtype, conj = False):
         elif dtype == np.complex64:
             operation = "pycuda::conj"
     
-    attname = 'pitch_'+funcname
-    if hasattr(_kernels, attname):
-        func = getattr(_kernels, attname)
-    else:
-        func = SourceModule(
+    func = SourceModule(
             transpose_template % {
                 "name": name,
                 "type": src_type,
                 "operation": operation
             },
             options=["--ptxas-options=-v"]).get_function(name)
-        func.prepare([np.int32, np.int32, np.intp,
-                      np.int32, np.intp, np.int32])
-        setattr(_kernels, attname, func)
+    func.prepare([np.int32, np.int32, np.intp,
+                  np.int32, np.intp, np.int32])
     return func
 
 
+@context_dependent_memoize
 def get_addarray_function(left_dtype, right_dtype,
                           rslt_dtype, pitch = True):
-    global _kernels
-    id = cuda.Context.get_device().PCI_BUS_ID
     type_left = dtype_to_ctype(left_dtype)
     type_right = dtype_to_ctype(right_dtype)
     type_rslt = dtype_to_ctype(rslt_dtype)
 
     name = "addarray"
     operation = "+"
-    funcname = (name+'_'+str(id)+'_'+left_dtype.name+'_'+
-                right_dtype.name+'_'+rslt_dtype.name)
     
     if pitch:
-        attname = 'pitch_'+funcname
-        if hasattr(_kernels, attname):
-            func = getattr(_kernels, attname)
-        else:
-            func = SourceModule(
+        func = SourceModule(
                 pitch_array_op_template % {
                     "name": name,
                     "dest_type": type_rslt,
@@ -348,15 +255,10 @@ def get_addarray_function(left_dtype, right_dtype,
                     "operation": operation,
                 },
                 options=["--ptxas-options=-v"]).get_function(name)
-            func.prepare([np.int32, np.int32, np.intp, np.int32,
-                          np.intp, np.int32, np.intp, np.int32])
-            setattr(_kernels, attname, func)
+        func.prepare([np.int32, np.int32, np.intp, np.int32,
+                      np.intp, np.int32, np.intp, np.int32])
     else:
-        attname = 'nonpitch_'+funcname
-        if hasattr(_kernels, attname):
-            func = getattr(_kernels, attname)
-        else:
-            func = SourceModule(
+        func = SourceModule(
                 non_pitch_array_op_template % {
                     "name": name,
                     "dest_type": type_rslt,
@@ -365,117 +267,19 @@ def get_addarray_function(left_dtype, right_dtype,
                     "operation": operation,
                 },
                 options=["--ptxas-options=-v"]).get_function(name)
-            func.prepare([np.intp, np.intp, np.intp, np.int32])
-            setattr(_kernels, attname, func)
+        func.prepare([np.intp, np.intp, np.intp, np.int32])
     return func
 
 
+@context_dependent_memoize
 def get_addscalar_function(src_type, dest_type, pitch = True):
-    global _kernels
-    id = cuda.Context.get_device().PCI_BUS_ID
     type_src = dtype_to_ctype(src_type)
     type_dest = dtype_to_ctype(dest_type)
     name = "addscalar"
     operation = "+"
-    funcname = name+'_'+str(id)+'_'+src_type.name+'_'+dest_type.name
     
     if pitch:
-        attname = 'pitch_'+funcname
-        if hasattr(_kernels, attname):
-            func = getattr(_kernels, attname)
-        else:
-            func = SourceModule(
-                pitch_left_scalar_op_template % {
-                    "name": name,
-                    "src_type": type_src,
-                    "dest_type": type_dest,
-                    "operation": operation,
-                },
-                options=["--ptxas-options=-v"]).get_function(name)
-            func.prepare([np.int32, np.int32, np.intp, np.int32,
-                          np.intp, np.int32, _get_type(dest_type)])
-            setattr(_kernels, attname, func)
-    else:
-        attname = 'nonpitch_'+funcname
-        if hasattr(_kernels, attname):
-            func = getattr(_kernels, attname)
-        else:
-            func = SourceModule(
-                non_pitch_left_scalar_op_template % {
-                    "name": name,
-                    "src_type": type_src,
-                    "dest_type": type_dest,
-                    "operation": operation,
-                },
-                options=["--ptxas-options=-v"]).get_function(name)
-            func.prepare([np.intp, np.intp, _get_type(dest_type), np.int32])
-            setattr(_kernels, attname, func)
-    return func
-
-
-def get_subarray_function(left_dtype, right_dtype, rslt_dtype, pitch = True):
-    global _kernels
-    id = cuda.Context.get_device().PCI_BUS_ID
-    type_left = dtype_to_ctype(left_dtype)
-    type_right = dtype_to_ctype(right_dtype)
-    type_rslt = dtype_to_ctype(rslt_dtype)
-    name = "subdarray"
-    operation = "-"
-    funcname = (name+'_'+str(id)+'_'+left_dtype.name+'_'+
-                right_dtype.name+'_'+rslt_dtype.name)
-    
-    if pitch:
-        attname = 'pitch_'+funcname
-        if hasattr(_kernels, attname):
-            func = getattr(_kernels, attname)
-        else:
-            func = SourceModule(
-                pitch_array_op_template % {
-                    "name": name,
-                    "dest_type": type_rslt,
-                    "left_type": type_left,
-                    "right_type": type_right,
-                    "operation": operation,
-                },
-                options=["--ptxas-options=-v"]).get_function(name)
-            func.prepare([np.int32, np.int32, np.intp, np.int32,
-                          np.intp, np.int32, np.intp, np.int32])
-            setattr(_kernels, attname, func)
-    else:
-        attname = 'nonpitch_'+funcname
-        if hasattr(_kernels, attname):
-            func = getattr(_kernels, attname)
-        else:
-            func = SourceModule(
-                non_pitch_array_op_template % {
-                    "name": name,
-                    "dest_type": type_rslt,
-                    "left_type": type_left,
-                    "right_type": type_right,
-                    "operation": operation,
-                },
-                options=["--ptxas-options=-v"]).get_function(name)
-            func.prepare([np.intp, np.intp, np.intp, np.int32])
-            setattr(_kernels, attname, func)
-    return func
-
-
-def get_subscalar_function(src_type, dest_type, pitch = True):
-    global _kernels
-    id = cuda.Context.get_device().PCI_BUS_ID
-    type_src = dtype_to_ctype(src_type)
-    type_dest = dtype_to_ctype(dest_type)
-    
-    name = "subscalar"
-    operation = "-"
-    funcname = name+'_'+str(id)+'_'+src_type.name+'_'+dest_type.name
-    
-    if pitch:
-        attname = 'pitch_'+funcname
-        if hasattr(_kernels, attname):
-            func = getattr(_kernels, attname)
-        else:
-            func = SourceModule(
+        func = SourceModule(
                 pitch_left_scalar_op_template % {
                     "name": name,
                     "src_type": type_src,
@@ -485,13 +289,8 @@ def get_subscalar_function(src_type, dest_type, pitch = True):
                 options=["--ptxas-options=-v"]).get_function(name)
         func.prepare([np.int32, np.int32, np.intp, np.int32,
                       np.intp, np.int32, _get_type(dest_type)])
-        setattr(_kernels, attname, func)
     else:
-        attname = 'nonpitch_'+funcname
-        if hasattr(_kernels, attname):
-            func = getattr(_kernels, attname)
-        else:
-            func = SourceModule(
+        func = SourceModule(
                 non_pitch_left_scalar_op_template % {
                     "name": name,
                     "src_type": type_src,
@@ -499,27 +298,86 @@ def get_subscalar_function(src_type, dest_type, pitch = True):
                     "operation": operation,
                 },
                 options=["--ptxas-options=-v"]).get_function(name)
-            func.prepare([np.intp, np.intp, _get_type(dest_type), np.int32])
-            setattr(_kernels, attname, func)
+        func.prepare([np.intp, np.intp, _get_type(dest_type), np.int32])
     return func
 
 
+@context_dependent_memoize
+def get_subarray_function(left_dtype, right_dtype, rslt_dtype, pitch = True):
+    type_left = dtype_to_ctype(left_dtype)
+    type_right = dtype_to_ctype(right_dtype)
+    type_rslt = dtype_to_ctype(rslt_dtype)
+    name = "subdarray"
+    operation = "-"
+    
+    if pitch:
+        func = SourceModule(
+                pitch_array_op_template % {
+                    "name": name,
+                    "dest_type": type_rslt,
+                    "left_type": type_left,
+                    "right_type": type_right,
+                    "operation": operation,
+                },
+                options=["--ptxas-options=-v"]).get_function(name)
+        func.prepare([np.int32, np.int32, np.intp, np.int32,
+                      np.intp, np.int32, np.intp, np.int32])
+    else:
+        func = SourceModule(
+                non_pitch_array_op_template % {
+                    "name": name,
+                    "dest_type": type_rslt,
+                    "left_type": type_left,
+                    "right_type": type_right,
+                    "operation": operation,
+                },
+                options=["--ptxas-options=-v"]).get_function(name)
+        func.prepare([np.intp, np.intp, np.intp, np.int32])
+    return func
+
+
+@context_dependent_memoize
+def get_subscalar_function(src_type, dest_type, pitch = True):
+    type_src = dtype_to_ctype(src_type)
+    type_dest = dtype_to_ctype(dest_type)
+    
+    name = "subscalar"
+    operation = "-"
+    
+    if pitch:
+        func = SourceModule(
+                pitch_left_scalar_op_template % {
+                    "name": name,
+                    "src_type": type_src,
+                    "dest_type": type_dest,
+                    "operation": operation,
+                },
+                options=["--ptxas-options=-v"]).get_function(name)
+        func.prepare([np.int32, np.int32, np.intp, np.int32,
+                      np.intp, np.int32, _get_type(dest_type)])
+    else:
+        func = SourceModule(
+                non_pitch_left_scalar_op_template % {
+                    "name": name,
+                    "src_type": type_src,
+                    "dest_type": type_dest,
+                    "operation": operation,
+                },
+                options=["--ptxas-options=-v"]).get_function(name)
+        func.prepare([np.intp, np.intp, _get_type(dest_type), np.int32])
+    return func
+
+
+@context_dependent_memoize
 def get_scalarsub_function(src_type, dest_type, pitch = True):
-    global _kernels
-    id = cuda.Context.get_device().PCI_BUS_ID
     type_src = dtype_to_ctype(src_type)
     type_dest = dtype_to_ctype(dest_type)
 
     name = "scalarsub"
     operation = "-"
-    funcname = name+'_'+str(id)+'_'+src_type.name+'_'+dest_type.name
     
     if pitch:
-        attname = 'pitch_'+funcname
-        if hasattr(_kernels, attname):
-            func = getattr(_kernels, attname)
-        else:
-            func = SourceModule(
+        func = SourceModule(
                 pitch_right_scalar_op_template % {
                     "name": name,
                     "src_type": type_src,
@@ -527,15 +385,10 @@ def get_scalarsub_function(src_type, dest_type, pitch = True):
                     "operation": operation,
                 },
                 options=["--ptxas-options=-v"]).get_function(name)
-            func.prepare([np.int32, np.int32, np.intp, np.int32,
-                          np.intp, np.int32, _get_type(dest_type)])
-            setattr(_kernels, attname, func)
+        func.prepare([np.int32, np.int32, np.intp, np.int32,
+                      np.intp, np.int32, _get_type(dest_type)])
     else:
-        attname = 'nonpitch_'+funcname
-        if hasattr(_kernels, attname):
-            func = getattr(_kernels, attname)
-        else:
-            func = SourceModule(
+        func = SourceModule(
                 non_pitch_right_scalar_op_template % {
                     "name": name,
                     "src_type": type_src,
@@ -543,29 +396,21 @@ def get_scalarsub_function(src_type, dest_type, pitch = True):
                     "operation": operation,
                 },
                 options=["--ptxas-options=-v"]).get_function(name)
-            func.prepare([np.intp, np.intp, _get_type(dest_type), np.int32])
-            setattr(_kernels, attname, func)
+        func.prepare([np.intp, np.intp, _get_type(dest_type), np.int32])
     return func
 
 
+@context_dependent_memoize
 def get_mularray_function(left_dtype, right_dtype, rslt_dtype, pitch = True):
-    global _kernels
-    id = cuda.Context.get_device().PCI_BUS_ID
     type_left = dtype_to_ctype(left_dtype)
     type_right = dtype_to_ctype(right_dtype)
     type_rslt = dtype_to_ctype(rslt_dtype)
 
     name = "mularray"
     operation = "*"
-    funcname = (name+'_'+str(id)+'_'+left_dtype.name+'_'+
-                right_dtype.name+'_'+rslt_dtype.name)
-    
+
     if pitch:
-        attname = 'pitch_'+funcname
-        if hasattr(_kernels, attname):
-            func = getattr(_kernels, attname)
-        else:
-            func = SourceModule(
+        func = SourceModule(
                 pitch_array_op_template % {
                     "name": name,
                     "dest_type": type_rslt,
@@ -574,15 +419,10 @@ def get_mularray_function(left_dtype, right_dtype, rslt_dtype, pitch = True):
                     "operation": operation,
                 },
                 options=["--ptxas-options=-v"]).get_function(name)
-            func.prepare([np.int32, np.int32, np.intp, np.int32,
-                          np.intp, np.int32, np.intp, np.int32])
-            setattr(_kernels, attname, func)
+        func.prepare([np.int32, np.int32, np.intp, np.int32,
+                      np.intp, np.int32, np.intp, np.int32])
     else:
-        attname = 'nonpitch_'+funcname
-        if hasattr(_kernels, attname):
-            func = getattr(_kernels, attname)
-        else:
-            func = SourceModule(
+        func = SourceModule(
                 non_pitch_array_op_template % {
                     "name": name,
                     "dest_type": type_rslt,
@@ -591,27 +431,20 @@ def get_mularray_function(left_dtype, right_dtype, rslt_dtype, pitch = True):
                     "operation": operation,
                 },
                 options=["--ptxas-options=-v"]).get_function(name)
-            func.prepare([np.intp, np.intp, np.intp, np.int32])
-            setattr(_kernels, attname, func)
+        func.prepare([np.intp, np.intp, np.intp, np.int32])
     return func
 
 
+@context_dependent_memoize
 def get_mulscalar_function(src_type, dest_type, pitch = True):
-    global _kernels
-    id = cuda.Context.get_device().PCI_BUS_ID
     type_src = dtype_to_ctype(src_type)
     type_dest = dtype_to_ctype(dest_type)
     
     name = "mulscalar"
     operation = "*"
-    funcname = name+'_'+str(id)+'_'+src_type.name+'_'+dest_type.name
     
     if pitch:
-        attname = 'pitch_'+funcname
-        if hasattr(_kernels, attname):
-            func = getattr(_kernels, attname)
-        else:
-            func = SourceModule(
+        func = SourceModule(
                 pitch_left_scalar_op_template % {
                     "name": name,
                     "src_type": type_src,
@@ -619,15 +452,10 @@ def get_mulscalar_function(src_type, dest_type, pitch = True):
                     "operation": operation,
                 },
                 options=["--ptxas-options=-v"]).get_function(name)
-            func.prepare([np.int32, np.int32, np.intp, np.int32,
-                          np.intp, np.int32, _get_type(dest_type)])
-            setattr(_kernels, attname, func)
+        func.prepare([np.int32, np.int32, np.intp, np.int32,
+                      np.intp, np.int32, _get_type(dest_type)])
     else:
-        attname = 'nonpitch_'+funcname
-        if hasattr(_kernels, attname):
-            func = getattr(_kernels, attname)
-        else:
-            func = SourceModule(
+        func = SourceModule(
                 non_pitch_left_scalar_op_template % {
                     "name": name,
                     "src_type": type_src,
@@ -635,29 +463,21 @@ def get_mulscalar_function(src_type, dest_type, pitch = True):
                     "operation": operation,
                 },
                 options=["--ptxas-options=-v"]).get_function(name)
-            func.prepare([np.intp, np.intp, _get_type(dest_type), np.int32])
-            setattr(_kernels, attname, func)
+        func.prepare([np.intp, np.intp, _get_type(dest_type), np.int32])
     return func
 
 
+@context_dependent_memoize
 def get_divarray_function(left_dtype, right_dtype, rslt_dtype, pitch = True):
-    global _kernels
-    id = cuda.Context.get_device().PCI_BUS_ID
     type_left = dtype_to_ctype(left_dtype)
     type_right = dtype_to_ctype(right_dtype)
     type_rslt = dtype_to_ctype(rslt_dtype)
 
     name = "divarray"
     operation = "/"
-    funcname = (name+'_'+str(id)+'_'+left_dtype.name+'_'+
-                right_dtype.name+'_'+rslt_dtype.name)
     
     if pitch:
-        attname = 'pitch_'+funcname
-        if hasattr(_kernels, attname):
-            func = getattr(_kernels, attname)
-        else:
-            func = SourceModule(
+        func = SourceModule(
                 pitch_array_op_template % {
                     "name": name,
                     "dest_type": type_rslt,
@@ -666,15 +486,10 @@ def get_divarray_function(left_dtype, right_dtype, rslt_dtype, pitch = True):
                     "operation": operation,
                 },
                 options=["--ptxas-options=-v"]).get_function(name)
-            func.prepare([np.int32, np.int32, np.intp, np.int32,
-                          np.intp, np.int32, np.intp, np.int32])
-            setattr(_kernels, attname, func)
+        func.prepare([np.int32, np.int32, np.intp, np.int32,
+                      np.intp, np.int32, np.intp, np.int32])
     else:
-        attname = 'nonpitch_'+funcname
-        if hasattr(_kernels, attname):
-            func = getattr(_kernels, attname)
-        else:
-            func = SourceModule(
+        func = SourceModule(
                 non_pitch_array_op_template % {
                     "name": name,
                     "dest_type": type_rslt,
@@ -683,27 +498,20 @@ def get_divarray_function(left_dtype, right_dtype, rslt_dtype, pitch = True):
                     "operation": operation,
                 },
                 options=["--ptxas-options=-v"]).get_function(name)
-            func.prepare([np.intp, np.intp, np.intp, np.int32])
-            setattr(_kernels, attname, func)
+        func.prepare([np.intp, np.intp, np.intp, np.int32])
     return func
 
 
+@context_dependent_memoize
 def get_divscalar_function(src_type, dest_type, pitch = True):
-    global _kernels
-    id = cuda.Context.get_device().PCI_BUS_ID
     type_src = dtype_to_ctype(src_type)
     type_dest = dtype_to_ctype(dest_type)
     
     name = "divscalar"
     operation = "/"
-    funcname = name+'_'+str(id)+'_'+src_type.name+'_'+dest_type.name
     
     if pitch:
-        attname = 'pitch_'+funcname
-        if hasattr(_kernels, attname):
-            func = getattr(_kernels, attname)
-        else:
-            func = SourceModule(
+        func = SourceModule(
                 pitch_left_scalar_op_template % {
                     "name": name,
                     "src_type": type_src,
@@ -711,15 +519,10 @@ def get_divscalar_function(src_type, dest_type, pitch = True):
                     "operation": operation,
                 },
                 options=["--ptxas-options=-v"]).get_function(name)
-            func.prepare([np.int32, np.int32, np.intp, np.int32,
-                          np.intp, np.int32, _get_type(dest_type)])
-            setattr(_kernels, attname, func)
+        func.prepare([np.int32, np.int32, np.intp, np.int32,
+                      np.intp, np.int32, _get_type(dest_type)])
     else:
-        attname = 'nonpitch_'+funcname
-        if hasattr(_kernels, attname):
-            func = getattr(_kernels, attname)
-        else:
-            func = SourceModule(
+        func = SourceModule(
                 non_pitch_left_scalar_op_template % {
                     "name": name,
                     "src_type": type_src,
@@ -727,27 +530,20 @@ def get_divscalar_function(src_type, dest_type, pitch = True):
                     "operation": operation,
                 },
                 options=["--ptxas-options=-v"]).get_function(name)
-            func.prepare([np.intp, np.intp, _get_type(dest_type), np.int32])
-            setattr(_kernels, attname, func)
+        func.prepare([np.intp, np.intp, _get_type(dest_type), np.int32])
     return func
 
 
+@context_dependent_memoize
 def get_scalardiv_function(src_type, dest_type, pitch = True):
-    global _kernels
-    id = cuda.Context.get_device().PCI_BUS_ID
     type_src = dtype_to_ctype(src_type)
     type_dest = dtype_to_ctype(dest_type)
     
     name = "scalardiv"
     operation = "/"
-    funcname = name+'_'+str(id)+'_'+src_type.name+'_'+dest_type.name
     
     if pitch:
-        attname = 'pitch_'+funcname
-        if hasattr(_kernels, attname):
-            func = getattr(_kernels, attname)
-        else:
-            func = SourceModule(
+        func = SourceModule(
                 pitch_right_scalar_op_template % {
                     "name": name,
                     "src_type": type_src,
@@ -755,15 +551,10 @@ def get_scalardiv_function(src_type, dest_type, pitch = True):
                     "operation": operation,
                 },
                 options=["--ptxas-options=-v"]).get_function(name)
-            func.prepare([np.int32, np.int32, np.intp, np.int32,
-                          np.intp, np.int32, _get_type(dest_type)])
-            setattr(_kernels, attname, func)
+        func.prepare([np.int32, np.int32, np.intp, np.int32,
+                      np.intp, np.int32, _get_type(dest_type)])
     else:
-        attname = 'nonpitch_'+funcname
-        if hasattr(_kernels, attname):
-            func = getattr(_kernels, attname)
-        else:
-            func = SourceModule(
+        func = SourceModule(
                 non_pitch_right_scalar_op_template % {
                     "name": name,
                     "src_type": type_src,
@@ -771,28 +562,20 @@ def get_scalardiv_function(src_type, dest_type, pitch = True):
                     "operation": operation,
                 },
                 options=["--ptxas-options=-v"]).get_function(name)
-            func.prepare([np.intp, np.intp, _get_type(dest_type), np.int32])
-            setattr(_kernels, attname, func)
+        func.prepare([np.intp, np.intp, _get_type(dest_type), np.int32])
     return func
 
 
+@context_dependent_memoize
 def get_complex_function(real_type, imag_type, result_type, pitch = True):
-    global _kernels
-    id = cuda.Context.get_device().PCI_BUS_ID
     type_real = dtype_to_ctype(real_type)
     type_imag = dtype_to_ctype(imag_type)
     type_result = dtype_to_ctype(result_type)
     
     name = "makecomplex"
-    funcname = (name+'_'+str(id)+'_'+real_type.name+'_'+
-                imag_type.name+'_'+result_type.name)
     
     if pitch:
-        attname = 'pitch_'+funcname
-        if hasattr(_kernels, attname):
-            func = getattr(_kernels, attname)
-        else:
-            func = SourceModule(
+        func = SourceModule(
                 pitch_complex_template % {
                     "name": name,
                     "real_type": type_real,
@@ -800,15 +583,10 @@ def get_complex_function(real_type, imag_type, result_type, pitch = True):
                     "result_type": type_result
                 },
                 options=["--ptxas-options=-v"]).get_function(name)
-            func.prepare([np.int32, np.int32, np.intp, np.int32,
-                          np.intp, np.intp, np.int32])
-            setattr(_kernels, attname, func)
+        func.prepare([np.int32, np.int32, np.intp, np.int32,
+                      np.intp, np.intp, np.int32])
     else:
-        attname = 'nonpitch_'+funcname
-        if hasattr(_kernels, attname):
-            func = getattr(_kernels, attname)
-        else:
-            func = SourceModule(
+        func = SourceModule(
                 non_pitch_complex_template % {
                     "name": name,
                     "real_type": type_real,
@@ -816,8 +594,7 @@ def get_complex_function(real_type, imag_type, result_type, pitch = True):
                     "result_type": type_result
                 },
                 options=["--ptxas-options=-v"]).get_function(name)
-            func.prepare([np.intp, np.intp, np.intp, np.int32])
-            setattr(_kernels, attname, func)
+        func.prepare([np.intp, np.intp, np.intp, np.int32])
     return func
 
 

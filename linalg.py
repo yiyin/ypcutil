@@ -3,7 +3,7 @@
 import numpy as np
 import pycuda.driver as cuda
 import pycuda.gpuarray as garray
-from pycuda.tools import dtype_to_ctype
+from pycuda.tools import dtype_to_ctype, context_dependent_memoize
 from pycuda.compiler import SourceModule
 
 import scikits.cuda.cublas as cublas
@@ -862,7 +862,9 @@ def fista_l2_mpi(A, b, rank, diag, groupsize, col_comm,
                           i / x_steps, np.sqrt(recv[0]),
                           (MPI.Wtime()-start)*1000)
     return d_xk
-        
+
+
+@context_dependent_memoize
 def _get_fista_err_func(dtype):
     template = """
 __global__ void err_update( %(type)s* err, %(type)s* b,
@@ -890,6 +892,7 @@ __global__ void err_update( %(type)s* err, %(type)s* b,
     return func
 
 
+@context_dependent_memoize
 def _get_fista_update_func(dtype):
     template = """
 __global__ void update(%(type)s* xk, %(type)s* yk, %(type)s* temp,
@@ -917,6 +920,7 @@ __global__ void update(%(type)s* xk, %(type)s* yk, %(type)s* temp,
     return func
 
 
+@context_dependent_memoize
 def _get_sq_kernel(dtype_s, dtype_q):
     template = """
 #include <pycuda/pycuda-complex.hpp>
@@ -959,6 +963,8 @@ sq_Kernel(%(types)s* d_S, %(typeq)s* d_q, %(types)s rcond, int size)
                  np.int32])
     return func
 
+
+@context_dependent_memoize
 def _get_eigsq_kernel(dtype_s, dtype_q):       
     template = """
 #include <pycuda/pycuda-complex.hpp>
@@ -996,6 +1002,7 @@ eigsq_Kernel(%(types)s* d_S, %(typeq)s* d_q, %(types)s thres, int size)
     return func
 
 
+@context_dependent_memoize
 def _get_sinv_kernel(dtype):
     template = """
 #include <pycuda/pycuda-complex.hpp>
@@ -1036,6 +1043,7 @@ sinv_Kernel(%(types)s* d_S, %(types)s rcond, int size)
     return func
 
 
+@context_dependent_memoize
 def _get_svinv_kernel(dtype_s, dtype_v):
     template = """
 #include <pycuda/pycuda-complex.hpp>
@@ -1080,6 +1088,7 @@ svinv_Kernel(%(types)s* d_S, %(typev)s* d_V, int ld,
     return func
 
 
+@context_dependent_memoize
 def _get_add_eye_func(dtype):
     template = """
 __global__ void adddiag(%(type)s* A, int ld, %(type)s value, int N)
