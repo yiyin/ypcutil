@@ -183,36 +183,36 @@ def dot(A, B, opa = 'n', opb = 'n',
                         #        + "dotu(n, A.gpudata, 1, B.gpudata, 1)"
                         #        +").conj())")
                         func = ("C.set(np.array(scale*" + tp
-                                + "dotu(n, A.gpudata, 1, B.gpudata, 1)"
-                                +").conj()+C.get()*Cscale" + handlestr)
+                                + "dotu(n, A.gpudata, 1, B.gpudata, 1"
+                                + handlestr +").conj()+C.get()*Cscale)")
                     else:
                         #func = ("C.set(np.array(" + tp
                         #        + "dotc(n, A.gpudata, 1, B.gpudata, 1)"
                         #        +"))")
                         func = ("C.set(np.array(scale*" + tp
-                                + "dotc(n, A.gpudata, 1, B.gpudata, 1)"
-                                +") + C.get()*Cscale" + handlestr)
+                                + "dotc(n, A.gpudata, 1, B.gpudata, 1"
+                                 + handlestr +") + C.get()*Cscale)")
                 elif opb in ['c', 'C']:
                     #func = ("C.set(np.array(" + tp
                     #        + "dotc(n, B.gpudata, 1, A.gpudata, 1)" +"))")
                     func = ("C.set(np.array(scale*" + tp
-                            + "dotc(n, B.gpudata, 1, A.gpudata, 1)"
-                            +") + C.get()*Cscale" + handlestr)
+                            + "dotc(n, B.gpudata, 1, A.gpudata, 1"
+                             + handlestr +") + C.get()*Cscale)")
                 else:
                     if complex_type:
                         #func = ("C.set(np.array(" + tp
                         #        + "dotu(n, A.gpudata, 1, B.gpudata, 1)"
                         #        +"))")
                         func = ("C.set(np.array(scale*" + tp
-                                + "dotu(n, A.gpudata, 1, B.gpudata, 1)"
-                                +") + C.get()*Cscale" + handlestr)
+                                + "dotu(n, A.gpudata, 1, B.gpudata, 1"
+                                 + handlestr +") + C.get()*Cscale)")
                     else:
                         #func = ("C.set(np.array(" + tp
                         #        + "dot(n, A.gpudata, 1, B.gpudata, 1)"
                         #        +"))")
                         func = ("C.set(np.array(scale*" + tp
-                                + "dot(n, A.gpudata, 1, B.gpudata, 1)"
-                                +") + C.get()*Cscale" + handlestr)
+                                + "dot(n, A.gpudata, 1, B.gpudata, 1"
+                                 + handlestr +") + C.get()*Cscale)")
     else:#m!=1
         if n == 1:
             if l == 1:
@@ -440,7 +440,7 @@ def svd(G, compute_u = True, compute_v = True, econ = False):
                     svd_func(jobu, jobvt, A.shape[1], A.shape[0],
                              A.gpudata, A.ld, S.gpudata, V.gpudata,
                             V.ld, 1, 1)
-                    cula.culaShutdown()
+                    #cula.culaShutdown()
                     return A,S,V
                 else:
                     jobu = 'O'
@@ -449,7 +449,7 @@ def svd(G, compute_u = True, compute_v = True, econ = False):
                     svd_func(jobu, jobvt, A.shape[1], A.shape[0],
                              A.gpudata, A.ld, S.gpudata, 1, 1,
                              U.gpudata, U.ld)
-                    cula.culaShutdown()
+                    #cula.culaShutdown()
                     return U,S,A
             else:
                 if A.shape[1] <= A.shape[0]:
@@ -459,7 +459,7 @@ def svd(G, compute_u = True, compute_v = True, econ = False):
                     svd_func(jobu, jobvt, A.shape[1], A.shape[0],
                              A.gpudata, A.ld, S.gpudata, 1, 1,
                              U.gpudata, U.ld)
-                    cula.culaShutdown()
+                    #cula.culaShutdown()
                     A.shape = (A.shape[1],A.shape[1])
                     return U,S,A
                 else:
@@ -470,7 +470,7 @@ def svd(G, compute_u = True, compute_v = True, econ = False):
                              A.gpudata, A.ld, S.gpudata, V.gpudata,
                              V.ld, 1, 1)
                     A.shape = (A.shape[0], A.shape[0])
-                    cula.culaShutdown()
+                    #cula.culaShutdown()
                     return A,S,V
         else:
             if econ | (A.shape[1] >= A.shape[0]):
@@ -480,7 +480,7 @@ def svd(G, compute_u = True, compute_v = True, econ = False):
                          A.gpudata, A.ld, S.gpudata, 1, 1, 1, 1)
                 if (A.shape[1] > A.shape[0]):
                     A.shape = (A.shape[0], A.shape[0])
-                cula.culaShutdown()
+                #cula.culaShutdown()
                 return A,S
             else:
                 jobu = 'N'
@@ -488,7 +488,7 @@ def svd(G, compute_u = True, compute_v = True, econ = False):
                 U = parray.empty((A.shape[0],A.shape[0]),A.dtype)
                 svd_func(jobu, jobvt, A.shape[1], A.shape[0],
                          A.gpudata, A.ld, S.gpudata, 1, 1, U.gpudata, U.ld)
-                cula.culaShutdown()
+                #cula.culaShutdown()
                 return U,S
     else:
         if compute_v:
@@ -499,7 +499,7 @@ def svd(G, compute_u = True, compute_v = True, econ = False):
                          A.gpudata, A.ld, S.gpudata, 1, 1, 1, 1)
                 if (A.shape[1] < A.shape[0]):
                     A.shape = (A.shape[1], A.shape[1])
-                cula.culaShutdown()
+                #cula.culaShutdown()
                 return S,A
             else:
                 jobu = 'A'
@@ -507,14 +507,14 @@ def svd(G, compute_u = True, compute_v = True, econ = False):
                 V = parray.empty((A.shape[1],A.shape[1]),A.dtype)
                 svd_func(jobu, jobvt, A.shape[1], A.shape[0],
                          A.gpudata, A.ld, S.gpudata, V.gpudata, V.ld, 1, 1)
-                cula.culaShutdown()
+                #cula.culaShutdown()
                 return S,V
         else:
             jobu = 'N'
             jobvt = 'N'
             svd_func(jobu, jobvt, A.shape[1], A.shape[0], A.gpudata,
                      A.ld, S.gpudata, 1, 1, 1, 1)
-            cula.culaShutdown()
+            #cula.culaShutdown()
             return S
 
 
