@@ -418,7 +418,7 @@ def svd(G, compute_u = True, compute_v = True, econ = False):
     elif A.dtype == np.float32:
         svd_func = cula.culaDeviceSgesvd
     else:
-        if cula._libcula_toolkit == 'premium':
+        if cula._libcula_toolkit == 'standard':
             if A.dtype == np.complex128:
                 svd_func = cula.culaDeviceZgesvd
             elif A.dtype == np.float64:
@@ -523,7 +523,7 @@ def svd(G, compute_u = True, compute_v = True, econ = False):
             return S
 
 
-def pinv(G, rcond = None):
+def pinv(G, rcond = 1e-8):
     """
     Computes the Moore-Penrose pseudo-inversion using SVD method
 
@@ -544,18 +544,14 @@ def pinv(G, rcond = None):
          pseudo-inverse of G matrix
     """
     U,S,V = svd(G, econ=1)
-    if rcond is None:
-        rcond = S.dtype.type(S[0].get()/5e8)
-    else:
-        rcond = S.dtype.type(rcond)
-    print "using rcond:", rcond, "in inversion"
+    print "using absolute rcond:", S[0].get()*rcond, "in inversion"
     sv_func = _get_svinv_kernel(S.dtype, V.dtype)
     sv_func.prepared_call(
         (S.size, 1), (256,1,1), S.gpudata, V.gpudata,
         V.ld, V.shape[1], rcond)
     return dot(V, U, opa='c', opb='c')
 
-def solve_eq(G, q, rcond = None):
+def solve_eq(G, q, rcond = 1e-8):
     """
     Solves Gc = q using pseudo-inversion
 
@@ -583,11 +579,7 @@ def solve_eq(G, q, rcond = None):
                          "the same of size of q")
     U,S,V = svd(G, econ=1)
     qq = dot(U, q, opa='c')
-    if rcond is None:
-        rcond = S.dtype.type(S[0].get()/5e8)
-    else:
-        rcond = S.dtype.type(rcond)
-    print "using rcond:", rcond, "in inversion"
+    print "using absolute rcond:", S[0].get()*rcond, "in inversion"
     sq_func = _get_sq_kernel(S.dtype, qq.dtype)
     sq_func.prepared_call(
         (6 * cuda.Context.get_device().MULTIPROCESSOR_COUNT, 1),
@@ -596,7 +588,7 @@ def solve_eq(G, q, rcond = None):
     return result
 
     
-def solve_eq_sym(G, q, rcond = None):
+def solve_eq_sym(G, q, rcond = 1e-8):
     """
     solves Gc = q using pseudo-inversion via SVD, 
     with G a self-adjoint matrix
@@ -629,11 +621,7 @@ def solve_eq_sym(G, q, rcond = None):
                          "the same of size of q")
     U,S = svd(G, compute_v=0)
     qq = dot(U, q, opa='c')
-    if rcond is None:
-        rcond = S.dtype.type(S[0].get()/5e8)
-    else:
-        rcond = S.dtype.type(rcond)
-    print "using rcond:", rcond, "in inversion"
+    print "using absolute rcond:", S[0].get()*rcond, "in inversion"
     
     sq_func = _get_sq_kernel(S.dtype, qq.dtype)
     sq_func.prepared_call(
