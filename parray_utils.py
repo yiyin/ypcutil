@@ -159,6 +159,40 @@ def get_abs_function(dtype, pitch = True):
 
 
 @context_dependent_memoize
+def get_angle_function(dtypein, dtypeout, pitch = True):
+    type_src = dtype_to_ctype(dtypein)
+    type_dest = dtype_to_ctype(dtypeout)
+    name = "angle_function"
+    if dtypeout == np.float32:
+        fletter = "f"
+    else:
+        fletter = ""
+    
+    if pitch:
+        func = SourceModule(
+                pitch_angle_template % {
+                    "name": name,
+                    "dest_type": type_dest,
+                    "src_type": type_src,
+                    "fletter": fletter,
+                },
+                options=["--ptxas-options=-v"]).get_function(name)
+        func.prepare(
+                [np.int32, np.int32, np.intp, np.int32, np.intp, np.int32])
+    else:
+        func = SourceModule(
+                non_pitch_angle_template % {
+                    "name": name,
+                    "dest_type": type_dest,
+                    "src_type": type_src,
+                    "fletter": fletter,
+                },
+                options=["--ptxas-options=-v"]).get_function(name)
+        func.prepare([np.intp, np.intp, np.int32])
+    return func
+
+
+@context_dependent_memoize
 def get_conj_function(dtype, pitch = True):
     type_src = dtype_to_ctype(dtype)
     if dtype == np.complex128:
@@ -601,7 +635,7 @@ def get_complex_function(real_type, imag_type, result_type, pitch = True):
 """templates"""
             
 pycuda_complex_header = """
-#include <pycuda/pycuda-complex.hpp>
+#include <pycuda-complex.hpp>
 extern "C++" {
 namespace pycuda{
 
@@ -676,19 +710,21 @@ __device__ inline complex<double> operator/(
     return complex<double>(__x*__z._M_re/nom, -__x*__z._M_im/nom);
 }
 
+
 }
 }
 
 """
-    
+
+
 
 pitch_complex_template = """
-#include <pycuda/pycuda-complex.hpp>
+#include <pycuda-complex.hpp>
 
 __global__ void
 %(name)s(const int M, const int N, %(result_type)s *odata,
          const int ldo, const %(real_type)s *real,
-         const %(imag_type)s *image, const int ldi)
+         const %(imag_type)s *imag, const int ldi)
 {
     //M is the number of rows, N is the number of columns
     const int tid = threadIdx.x;
@@ -708,7 +744,7 @@ __global__ void
         if(idx < N)
         {
             tmp = %(result_type)s(real[m*ldi+idx], imag[m*ldi+idx]);
-            dest[m * ldo + idx] = (tmp);
+            odata[m * ldo + idx] = (tmp);
         }
     }
 }
@@ -717,7 +753,7 @@ __global__ void
 
 
 non_pitch_complex_template = """
-#include <pycuda/pycuda-complex.hpp>
+#include <pycuda-complex.hpp>
 
 __global__ void
 %(name)s(%(result_type)s *odata, const %(real_type)s *real,
@@ -738,7 +774,7 @@ __global__ void
 """
 
 transpose_template = """
-#include <pycuda/pycuda-complex.hpp>
+#include <pycuda-complex.hpp>
 #define TILE_DIM 32
 #define BLOCK_ROWS 8
     
@@ -790,9 +826,64 @@ __global__ void
 
 """
 
+pitch_angle_template = """
+#include <pycuda-complex.hpp>
+
+__global__ void
+%(name)s(const int M, const int N, %(dest_type)s *dest,
+         const int ld_dest, const %(src_type)s *src, const int ld_src)
+{
+    //M is the number of rows, N is the number of columns
+    const int tid = threadIdx.x;
+    const int sid = threadIdx.y + blockDim.y * blockIdx.x;
+    const int total = gridDim.x * blockDim.y;
+
+    int m, n, idx;
+    %(src_type)s tmp;
+    int segment_per_row = ((N - 1) >> 5) + 1;
+    int total_segments = M * segment_per_row;
+    for(int i = sid; i < total_segments; i+=total)
+    {
+        m = i / segment_per_row;
+        n = i %% segment_per_row;
+        idx = (n<<5) + tid;
+        if(idx < N)
+        {
+            tmp = src[m * ld_src + idx];
+            dest[m * ld_dest + idx] = atan2%(fletter)s(pycuda::imag(tmp), pycuda::real(tmp));
+        }
+    }
+}
+
+"""
+"""
+launching MULTIPROCESSOR_COUNT*6 blocks of (32,8,1),
+M: number of rows, N: number of columns,
+ld: leading dimension entries(aasumed to be row major)
+"""
+
+non_pitch_angle_template = """
+#include <pycuda-complex.hpp>
+            
+__global__ void
+%(name)s (%(dest_type)s *dest, const %(src_type)s *src, const int N)
+{
+    const int totalthreads = blockDim.x * gridDim.x;
+    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    %(src_type)s tmp;
+    for (int i = tid; i < N; i += totalthreads)
+    {
+        tmp = src[i];
+        dest[i] =  atan2%(fletter)s(pycuda::imag(tmp), pycuda::real(tmp));
+    }
+}
+
+"""
+""" launching MULTIPROCESSOR_COUNT*6 blocks of (256,1,1), N = totalsize"""
+
 
 pitch_template = """
-#include <pycuda/pycuda-complex.hpp>
+#include <pycuda-complex.hpp>
 
 __global__ void
 %(name)s(const int M, const int N, %(dest_type)s *dest,
@@ -829,7 +920,7 @@ ld: leading dimension entries(aasumed to be row major)
 
             
 non_pitch_template = """
-#include <pycuda/pycuda-complex.hpp>
+#include <pycuda-complex.hpp>
             
 __global__ void
 %(name)s (%(dest_type)s *dest, const %(src_type)s *src, const int N)
@@ -849,7 +940,7 @@ __global__ void
 
 
 reshape_template = """
-#include <pycuda/pycuda-complex.hpp>
+#include <pycuda-complex.hpp>
 #include <cuComplex.h>
 __global__ void
 %(name)s(const int Msrc, const int Nsrc, const int Mdest,
@@ -874,7 +965,7 @@ ld: leading dimension entries(aasumed to be row major)
 """
 
 irregular_pitch_template = """
-#include <pycuda/pycuda-complex.hpp>
+#include <pycuda-complex.hpp>
 
 __global__ void
 %(name)s(const int M, const int N, %(dest_type)s *dest,
@@ -1055,7 +1146,7 @@ __global__ void
 """
 
 fill_pitch_template = """
-#include <pycuda/pycuda-complex.hpp>
+#include <pycuda-complex.hpp>
 
 __global__ void
 %(name)s(const int M, const int N, %(type_dst)s *dst,
@@ -1086,7 +1177,7 @@ ld: leading dimension entries(aasumed to be row major)
 """
 
 fill_nonpitch_template = """
-#include <pycuda/pycuda-complex.hpp>
+#include <pycuda-complex.hpp>
 
 __global__ void
 %(name)s(const int M,  %(type_dst)s *dst, %(type_dst)s value)

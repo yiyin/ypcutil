@@ -9,6 +9,7 @@ from pycuda.compiler import SourceModule
 import scikits.cuda.cublas as cublas
 import scikits.cuda.cula as cula
 import parray
+import simpleio as si
 
 
 """ assuming row major storage as in PitchArray """
@@ -550,6 +551,36 @@ def pinv(G, rcond = 1e-8):
         (S.size, 1), (256,1,1), S.gpudata, V.gpudata,
         V.ld, V.shape[1], rcond)
     return dot(V, U, opa='c', opb='c')
+    
+def pinv_sym(G, rcond = 1e-8):
+    """
+    Computes the Moore-Penrose pseudo-inversion using SVD method
+
+    Parameters
+    -----------------------------------
+    G:  PitchArray, GPUArray or numpy.ndarray of shape (m,m)
+        symmetric matrix
+        if G is GPUArray or PitchArray, 
+        its gpudata will be destroyed after calling the function
+    rcond:  float
+            Cutoff for small singular values.
+            Singular values smaller (in modulus) than
+            `rcond` * largest_singular_value (again, in modulus)
+            are set to zero
+            
+    Returns
+    -----------------------------------
+    out: PitchArray
+         pseudo-inverse of G matrix
+    """
+    S,V = svd(G, compute_u=0)
+    print "using absolute rcond:", S[0].get()*rcond, "in inversion"
+    V_2 = V.copy()
+    sv_func = _get_svinv_kernel(S.dtype, V.dtype)
+    sv_func.prepared_call(
+        (S.size, 1), (256,1,1), S.gpudata, V.gpudata,
+        V.ld, V.shape[1], rcond)
+    return dot(V, V_2, opa='c')
 
 def solve_eq(G, q, rcond = 1e-8):
     """
@@ -588,7 +619,7 @@ def solve_eq(G, q, rcond = 1e-8):
     return result
 
     
-def solve_eq_sym(G, q, rcond = 1e-8):
+def solve_eq_sym(G, q, rcond = 1e-8, save_singular = None, cut_num = None):
     """
     solves Gc = q using pseudo-inversion via SVD, 
     with G a self-adjoint matrix
@@ -620,6 +651,15 @@ def solve_eq_sym(G, q, rcond = 1e-8):
         raise ValueError("number of columns of G must be "
                          "the same of size of q")
     U,S = svd(G, compute_v=0)
+    if save_singular is not None:
+        si.write_memory_to_file(S, save_singular)
+
+    if cut_num is not None:
+        if cut_num >= S.size:
+            rcond = 1e-7
+        else:
+            rcond = (S[cut_num].get()+S[cut_num-1].get())/2/S[0].get()
+    
     qq = dot(U, q, opa='c')
     print "using absolute rcond:", S[0].get()*rcond, "in inversion"
     
@@ -915,7 +955,7 @@ __global__ void update(%(type)s* xk, %(type)s* yk, %(type)s* temp,
 @context_dependent_memoize
 def _get_sq_kernel(dtype_s, dtype_q):
     template = """
-#include <pycuda/pycuda-complex.hpp>
+#include <pycuda-complex.hpp>
 
 __global__ void
 sq_Kernel(%(types)s* d_S, %(typeq)s* d_q, %(types)s rcond, int size)
@@ -959,7 +999,7 @@ sq_Kernel(%(types)s* d_S, %(typeq)s* d_q, %(types)s rcond, int size)
 @context_dependent_memoize
 def _get_eigsq_kernel(dtype_s, dtype_q):       
     template = """
-#include <pycuda/pycuda-complex.hpp>
+#include <pycuda-complex.hpp>
 
 __global__ void
 eigsq_Kernel(%(types)s* d_S, %(typeq)s* d_q, %(types)s thres, int size)
@@ -997,7 +1037,7 @@ eigsq_Kernel(%(types)s* d_S, %(typeq)s* d_q, %(types)s thres, int size)
 @context_dependent_memoize
 def _get_sinv_kernel(dtype):
     template = """
-#include <pycuda/pycuda-complex.hpp>
+#include <pycuda-complex.hpp>
 
 __global__ void
 sinv_Kernel(%(types)s* d_S, %(types)s rcond, int size)
@@ -1038,7 +1078,7 @@ sinv_Kernel(%(types)s* d_S, %(types)s rcond, int size)
 @context_dependent_memoize
 def _get_svinv_kernel(dtype_s, dtype_v):
     template = """
-#include <pycuda/pycuda-complex.hpp>
+#include <pycuda-complex.hpp>
 
 __global__ void
 svinv_Kernel(%(types)s* d_S, %(typev)s* d_V, int ld,
@@ -1048,7 +1088,7 @@ svinv_Kernel(%(types)s* d_S, %(typev)s* d_V, int ld,
     int bid = blockIdx.x;
     int bdim = blockDim.x;
 
-    __shared__ %(types)s s[0];
+    __shared__ %(types)s s[1];
 
     if(threadIdx.x == 0)
     {

@@ -2031,6 +2031,30 @@ def make_complex(real, imag):
                 real.ld)
     return result
 
+def angle(array):
+    if isrealobj(array):
+        if issingle(array.dtype):
+            return parray.zeros(array.shape, np.float32)
+        else:
+            return parray.zeros(array.shape, np.double)
+    else:
+        if issingle(array.dtype):
+            result = empty(array.shape, dtype = np.float32)
+        else:
+            result = empty(array.shape, dtype = np.double)
+            
+        if array.M == 1:
+            func = pu.get_angle_function(array.dtype, result.dtype, pitch = False)
+            func.prepared_call(
+                array._grid, array._block, result.gpudata,
+                array.gpudata, array.size)
+        else:
+            func = pu.get_angle_function(
+                array.dtype, result.dtype, pitch = True)
+            func.prepared_call(
+                array._grid, array._block, array.M, array.N,
+                result.gpudata, result.ld, array.gpudata, array.ld)
+        return result
 
 
 

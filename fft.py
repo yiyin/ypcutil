@@ -730,7 +730,7 @@ def _fft2_parray(d_A, econ = False):
     if econ and realA:
         outshape[-1] = outshape[-1]/2+1
     d_output = parray.empty(outshape, outdtype)
-    batch_size = min(total_inputs, 128)
+    batch_size = min(total_inputs, 8)
     
     plan = fftplan(
         size, d_A.dtype, d_A.ld, d_output.ld, forward = True, econ = realA,
@@ -807,7 +807,7 @@ def _fft2_gpuarray(d_A, econ = False):
     if econ and realA:
         outshape[-1] = outshape[-1]/2+1
     d_output = gpuarray.empty(outshape, outdtype)
-    batch_size = min(total_inputs, 128)
+    batch_size = min(total_inputs, 8)
     input_total_elements = size[0]*size[1]
     output_total_elements = outshape[-1]*outshape[-2]
     
@@ -950,7 +950,7 @@ def _ifft2_parray(d_A, econ = False, even_size = None,
     d_output = (parray.empty((total_inputs, size[0], size[1]), outdtype) if
                     ndim == 3 else parray.empty(size, outdtype))
     
-    batch_size = min(total_inputs, 128)
+    batch_size = min(total_inputs, 8)
     plan = fftplan(size, d_A.dtype, d_A.ld, d_output.ld,
                    forward = False, econ = econ,
                    batch_size = batch_size,
@@ -1040,7 +1040,7 @@ def _ifft2_gpuarray(d_A, econ = False, even_size = None,
     
     input_total_elements = size[0]*(size[1]/2+1 if econ else size[1])
     output_total_elements = size[0]*size[1]
-    batch_size = min(total_inputs, 128)
+    batch_size = min(total_inputs, 8)
     plan = fftplan(size, d_A.dtype, input_total_elements,
                    output_total_elements, forward = False,
                    econ = econ, batch_size = batch_size)
@@ -1460,7 +1460,7 @@ def _get_1d_pad_func(dtype):
     Kernel not optimized.
     """
     template = """
-#include <pycuda/pycuda-complex.hpp>
+#include <pycuda-complex.hpp>
 __global__ void
 get_1d_pad_kernel(%(type)s* input, int ld, int fftsize, int nbatch)
 {
@@ -1497,7 +1497,7 @@ def _get_2d_pad_func(dtype, ndim):
     """
     if ndim == 3:
         template = """
-#include <pycuda/pycuda-complex.hpp>
+#include <pycuda-complex.hpp>
 __global__ void
 get_2d_pad_kernel(%(type)s* input, int ld, int fftsize_x,
                   int fftsize_y, int nbatch)
@@ -1524,7 +1524,7 @@ get_2d_pad_kernel(%(type)s* input, int ld, int fftsize_x,
         """
     elif ndim == 2:
         template = """
-#include <pycuda/pycuda-complex.hpp>
+#include <pycuda-complex.hpp>
 __global__ void
 get_2d_pad_kernel(%(type)s* input, int ld, int fftsize_x,
                   int fftsize_y, int nbatch)
@@ -1565,7 +1565,7 @@ def _get_3d_pad_func(dtype, ndim):
     """
     if ndim == 4:
         template = """
-#include <pycuda/pycuda-complex.hpp>
+#include <pycuda-complex.hpp>
 __global__ void
 get_3d_pad_kernel(%(type)s* input, int ld, int fftsize_x,
                   int fftsize_y, int fftsize_z, int nbatch)
@@ -1598,7 +1598,7 @@ get_3d_pad_kernel(%(type)s* input, int ld, int fftsize_x,
         """
     elif ndim == 3:
         template = """
-#include <pycuda/pycuda-complex.hpp>
+#include <pycuda-complex.hpp>
 __global__ void
 get_3d_pad_kernel(%(type)s* input, int ld, int fftsize_x,
                   int fftsize_y, int fftsize_z, int nbatch)
