@@ -1482,7 +1482,7 @@ get_1d_pad_kernel(%(type)s* input, int ld, int fftsize, int nbatch)
     mod = SourceModule(template % {"type": dtype_to_ctype(dtype)},
                        options = ["--ptxas-options=-v"])
     func = mod.get_function('get_1d_pad_kernel')
-    func.prepare([np.intp, np.int32, np.int32, np.int32])
+    func.prepare('Piii')
     #grid = (6*cuda.Context.get_device().MULTIPROCESSOR_COUNT, 1)    
     #block = (256, 1, 1)
     #Used 19 registers, 52 bytes cmem[0], 168 bytes cmem[2]
@@ -1550,7 +1550,7 @@ get_2d_pad_kernel(%(type)s* input, int ld, int fftsize_x,
     mod = SourceModule(template % {"type": dtype_to_ctype(dtype)},
                        options = ["--ptxas-options=-v"])
     func = mod.get_function('get_2d_pad_kernel')
-    func.prepare([np.intp, np.int32, np.int32, np.int32, np.int32])
+    func.prepare('Piiii')
     #grid = (6*cuda.Context.get_device().MULTIPROCESSOR_COUNT, 1)    
     #block = (256, 1, 1)
     #Used 19 registers, 52 bytes cmem[0], 168 bytes cmem[2]
@@ -1628,7 +1628,7 @@ get_3d_pad_kernel(%(type)s* input, int ld, int fftsize_x,
     mod = SourceModule(template % {"type": dtype_to_ctype(dtype)},
                        options = ["--ptxas-options=-v"])
     func = mod.get_function('get_3d_pad_kernel')
-    func.prepare([np.intp, np.int32, np.int32, np.int32, np.int32, np.int32])
+    func.prepare('Piiiii')
     #grid = (6*cuda.Context.get_device().MULTIPROCESSOR_COUNT, 1)    
     #block = (256, 1, 1)
     #Used 19 registers, 52 bytes cmem[0], 168 bytes cmem[2]

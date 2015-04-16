@@ -293,8 +293,7 @@ update(%(type)s* xk, %(type)s* temp, int size, int groupsize, %(type)s L)
     mod = SourceModule(template % {"type": dtype_to_ctype(dtype)},
                        options = ["--ptxas-options=-v"])
     func = mod.get_function("update")
-    func.prepare([np.intp, np.intp, np.int32, np.int32,
-                  dtype.type if isinstance(dtype, np.dtype) else dtype])
+    func.prepare('PPii'+np.dtype(dtype).char)
     #grid = (6*nstreamprocessors, 1)
     #block = (256, 1, 1)
     return func
@@ -324,9 +323,7 @@ err_update(%(type)s* err, %(type)s* b, %(type)s* Ax, %(type)s* c,
     mod = SourceModule(template % {"type": dtype_to_ctype(dtype)},
                        options = ["--ptxas-options=-v"])
     func = mod.get_function("err_update")
-    func.prepare([np.intp, np.intp, np.intp, np.intp,
-                  dtype.type if isinstance(dtype, np.dtype) else dtype,
-                  np.int32, np.int32])
+    func.prepare('PPPP'+np.dtype(dtype).char+'ii')
     #grid = (6*nstreamprocessors, 1)
     #block = (256, 1, 1)
     return func
@@ -498,10 +495,7 @@ rnn2_y_update(%(type)s* d_y, %(type)s dt_alpha_lambda,
     mod = SourceModule(rnn2_template % {"type": dtype_to_ctype(dtype)},
                        options = ["--ptxas-options=-v"])
     func = mod.get_function("rnn2_y_update")
-    func.prepare([np.intp,
-                  dtype.type if isinstance(dtype, np.dtype) else dtype,
-                  np.intp, np.intp,
-                  np.intp, np.int32, np.int32])
+    func.prepare('P'+np.dtype(dtype).char+'PPPii')
     return func
 
 
@@ -536,9 +530,7 @@ rnn2_c_update(%(type)s* d_xp, %(type)s* d_xm, %(type)s* d_c,
     mod = SourceModule(rnn2_template % {"type": dtype_to_ctype(dtype)},
                        options = ["--ptxas-options=-v"])
     func = mod.get_function("rnn2_c_update")
-    func.prepare([np.intp, np.intp, np.intp, np.intp,
-                  dtype.type if isinstance(dtype, np.dtype) else dtype,
-                  np.int32, np.int32])
+    func.prepare('PPPP'+np.dtype(dtype).char+'ii')
     return func
 
 
@@ -772,9 +764,7 @@ rnn3_update(%(type)s* d_c, %(type)s dt_alpha, %(type)s* d_q,
     mod = SourceModule(rnn3_template % {"type": dtype_to_ctype(dtype)},
                        options = ["--ptxas-options=-v"])
     func = mod.get_function("rnn3_update")
-    func.prepare([np.intp,
-                  dtype.type if isinstance(dtype, np.dtype) else dtype,
-                  np.intp, np.intp, np.intp, np.int32, np.int32])
+    func.prepare('P'+np.dtype(dtype).char+'PPPii')
     return func
 
 
