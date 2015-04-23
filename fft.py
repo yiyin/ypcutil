@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 
-import pdb
-
 import numpy as np
 import pycuda.driver as cuda
 from pycuda.tools import dtype_to_ctype

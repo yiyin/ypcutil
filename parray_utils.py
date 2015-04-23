@@ -6,6 +6,11 @@ import pycuda.driver as cuda
 from pycuda.compiler import SourceModule
 from pycuda.tools import dtype_to_ctype, context_dependent_memoize
 
+"""
+This file contains functions to get prepared cuda functions for parray.py.
+All functions here should not be used directly.
+"""
+
 
 def _get_type(dtype):
     return dtype.type if isinstance(dtype, np.dtype) else dtype
@@ -631,6 +636,36 @@ def get_complex_function(real_type, imag_type, result_type, pitch = True):
         func.prepare([np.intp, np.intp, np.intp, np.int32])
     return func
 
+@context_dependent_memoize
+def get_complex_from_amp_function(in_type, result_type, pitch = True):
+    type_in = dtype_to_ctype(in_type)
+    type_result = dtype_to_ctype(result_type)
+    
+    name = "makecomplex_amp_phase"
+    
+    if pitch:
+        func = SourceModule(
+                pitch_complex_amp_template % {
+                    "name": name,
+                    "in_type": type_in,
+                    "result_type": type_result,
+                    "fletter": 'f' if in_type == np.float32 else ''
+                },
+                options=["--ptxas-options=-v"]).get_function(name)
+        func.prepare([np.int32, np.int32, np.intp, np.int32,
+                      np.intp, np.intp, np.int32])
+    else:
+        func = SourceModule(
+                non_pitch_complex_amp_template % {
+                    "name": name,
+                    "in_type": type_in,
+                    "result_type": type_result,
+                    "fletter": 'f' if in_type == np.float32 else ''
+                },
+                options=["--ptxas-options=-v"]).get_function(name)
+        func.prepare([np.intp, np.intp, np.intp, np.int32])
+    return func
+
 
 """templates"""
             
@@ -767,6 +802,67 @@ __global__ void
     for (int i = tid; i < N; i += totalthreads)
     {
         tmp = %(result_type)s(real[i], imag[i]);
+        odata[i] = (tmp);
+    }
+}
+
+"""
+
+pitch_complex_amp_template = """
+#include <pycuda-complex.hpp>
+
+__global__ void
+%(name)s(const int M, const int N, %(result_type)s *odata,
+         const int ldo, const %(in_type)s *amp,
+         const %(in_type)s *phase, const int ldi)
+{
+    //M is the number of rows, N is the number of columns
+    const int tid = threadIdx.x;
+    const int sid = threadIdx.y + blockDim.y * blockIdx.x;
+    const int total = gridDim.x * blockDim.y;
+
+    int m, n, idx;
+    %(result_type)s tmp;
+    int segment_per_row = ((N - 1) >> 5) + 1;
+    int total_segments = M * segment_per_row;
+    %(in_type)s c,s, a;
+    
+    for(int i = sid; i < total_segments; i+=total)
+    {
+        m = i / segment_per_row;
+        n = i %% segment_per_row;
+        idx = (n<<5) + tid;
+        if(idx < N)
+        {
+            sincos%(fletter)s(phase[m*ldi+idx], &s, &c);
+            a = amp[m*ldi+idx];
+            tmp = %(result_type)s(a*c, a*s);
+            odata[m * ldo + idx] = (tmp);
+        }
+    }
+}
+
+"""
+
+
+non_pitch_complex_amp_template = """
+#include <pycuda-complex.hpp>
+
+__global__ void
+%(name)s(%(result_type)s *odata, const %(in_type)s *amp,
+         const %(in_type)s *phase, const int N)
+{
+    const int totalthreads = blockDim.x * gridDim.x;
+    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+
+    %(result_type)s tmp;
+    %(in_type)s c,s, a;
+
+    for (int i = tid; i < N; i += totalthreads)
+    {
+        sincos%(fletter)s(phase[i], &s, &c);
+        a = amp[i];
+        tmp = %(result_type)s(a*c, a*s);
         odata[i] = (tmp);
     }
 }

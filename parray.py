@@ -29,6 +29,7 @@ def splay(n, M):
     
     
 def _get_common_dtype(obj1, obj2):
+    """Return the 'least common multiple' of dtype of obj1 and obj2."""
     return (obj1.dtype.type(0) + obj2.dtype.type(0)).dtype
 
 
@@ -63,8 +64,9 @@ def _get_common_dtype_with_scalar(scalar, obj1):
     
     Parameters
     ----------
-    scalar : int, float, complex
+    scalar : { int, float, complex }
     obj1 : numpy.ndarray like array.
+    
     """
     if issubclass(type(scalar), (int, float, np.integer, np.floating)):
         return obj1.dtype
@@ -92,6 +94,7 @@ def _get_inplace_dtype_with_scalar(scalar, obj1):
     Returns
     -------
     out : np.dtype
+    
     """
     if isrealobj(obj1):
         if issubclass(type(scalar), (complex, np.complexfloating)):
@@ -105,6 +108,7 @@ def _get_inplace_dtype_with_scalar(scalar, obj1):
 
 
 def _pd(shape):
+    """ Returns the product of all element of shape except shape[0]. """
     s = 1
     for dim in shape[1:]:
         s *= dim
@@ -126,6 +130,31 @@ def PitchTrans(shape, dst, dst_ld, src, src_ld, dtype, aligned=False,
     """
     Wrapper around cuda.Memcpy2D
     Enable pitched memory transfer.
+    
+    Parameters
+    ----------
+    shape : tuple of ints
+        shape of the 2D array to be transferred.
+    dst : { cuda.DeviceAllocation, int, long }
+        pointer to the device memory to be transferred to.
+    dst_ld: int
+        leading dimension (pitch) of destination.
+    src : { pycuda.driver.DeviceAllocation, int, long }
+        pointer to the device memory to be transferred from.
+    src_ld : int
+        leading dimension (pitch) of source.
+    
+    Optional Parameters
+    -------------------
+    aligned : bool
+        if aligned is False, tolerate device-side misalignment for
+        device-to-device copies that may lead to loss of copy bandwidth.
+        (default: False).
+    async : bool
+        use asynchronous transfer (default: False).
+    stream : pycuda.driver.stream
+        specify the cuda stream (default: None).
+    
     """
     size = np.dtype(dtype).itemsize
 
@@ -159,18 +188,22 @@ class PitchArray(object):
         Create a PitchArray
         
         Parameters
-        --------------------------------------
-        shape: shape of the array
-        dtype: dtype of the array
-        gpudata: DeviceAllocation object indicating the device
-                 memory allocated
-        pitch: if gpudata is specified and pitch is True, 
-               gpudata will be treated as if it was allocated by
-               cudaMallocPitch with pitch
-        base: base PitchArray
+        ----------
+        shape: tuple of ints
+            shape of the array
+        dtype: np.dtype
+            dtype of the array
+        gpudata: pycuda.driver.DeviceAllocation
+            DeviceAllocation object indicating the device memory allocated
+        pitch: int
+            if gpudata is specified and pitch is True,
+            gpudata will be treated as if it was allocated by
+            cudaMallocPitch with pitch
+        base: PitchArray
+            base PitchArray
         
         Attributes:
-        --------------------------------------
+        -----------
         .shape: shape of self
         .size:  number of elements of the array
         .mem_size: number of elements of total memory allocated
@@ -185,9 +218,13 @@ class PitchArray(object):
         .base: base PitchArray
         
         Note:
-        any 1-dim shape will result in a row vector with
+        -----
+        1. any 1-dim shape will result in a row vector with
         new shape as (1, shape) operations of PitchArray
         is elementwise operation
+        
+        2. only support array of dimension up to 3.
+        
         """
         
         try:
@@ -288,10 +325,11 @@ class PitchArray(object):
         Set PitchArray with an numpy.ndarray
         
         Parameter:
-        ------------------------------------------
+        ----------
         ary: num.ndarray
              must have the same shape as self if ndim > 2,
              and same length as self if ndim == 1
+             
         """
         assert ary.ndim <= 3
         assert ary.dtype == ary.dtype
@@ -310,11 +348,16 @@ class PitchArray(object):
         using asynchrous memroy transfer
         
         Parameter:
-        ------------------------------------------
+        ----------
         ary: num.ndarray pagelocked
              must have the same shape as self if ndim > 2,
              and same length as self if ndim == 1
              must be created by cuda.HostAllocation
+             
+        Optional Parameter:
+        -------------------
+        stream : pycuda.driver.Stream
+        
         """
         assert ary.ndim <= 3
         assert ary.dtype == ary.dtype
@@ -336,14 +379,17 @@ class PitchArray(object):
         """
         Get the PitchArray to an ndarray
         
-        Parameters:
-        -------------------------------
+        Optional Parameters:
+        --------------------
         ary: numpy.ndarray
-             if specified, will transfer device memory to ary's memory
-             if None, create a new array
+            if specified, will transfer device memory to ary's memory
+            if None, create a new array
+            (default: None).
         pagelocked: bool
-                    if True, create a pagelocked ndarray
-                    if False, create a regular ndarray
+            if True, create a pagelocked ndarray
+            if False, create a regular ndarray
+            (default: False)
+            
         """
         if ary is None:
             if pagelocked:
@@ -369,15 +415,16 @@ class PitchArray(object):
         """
         Get the PitchArray to an ndarray asynchronously
         
-        Parameters:
-        -------------------------------
-        stream: pycuda.driver.stream
-                The stream for asynchronous transfer
-                if not specified, use default stream
+        Optional Parameters:
+        --------------------
+        stream: pycuda.driver.Stream
+            (default: None)
         ary: numpy.ndarray
-             if specified, will transfer device memory to ary's memory,
-             must be pagelocked
-             if None, create a new array
+            if specified, will transfer device memory to ary's memory,
+            must be pagelocked
+            if None, create a new array
+            (default: None)
+        
         """
         if ary is None:
             ary = cuda.pagelocked_empty(self.shape, self.dtype)
@@ -730,9 +777,10 @@ class PitchArray(object):
         -------
         out : PitchArray
             A new PitchArray
+            
         """
         """
-        # this par it not necessary
+        # this part it not necessary
         if isinstance(other, PitchArray):
             if self.shape != other.shape:
                 raise ValueError("array dimension misaligned")
@@ -1460,8 +1508,13 @@ class PitchArray(object):
     def conj(self, inplace = True):
         """
         returns the conjuation of self.
-        if inplace is True, conjugation will be performed in place
-
+        
+        Paramters:
+        ----------
+        inplace: bool (optional)
+            if inplace is True, conjugation will be performed in place
+            (default: True)
+        
         """
         if self.dtype in [np.complex64, np.complex128]:
             if inplace:
@@ -1487,8 +1540,16 @@ class PitchArray(object):
     def reshape(self, shape, inplace = True):
         """
         reshape the shape of self to "shape"
-        if inplace is True, enforce to keep the device memory of 
-        self if possible
+        
+        Paramters:
+        ----------
+        shape : tuple of ints
+            the new shape to be reshaped to
+        inplace : bool (optional)
+            if True, enforce to keep the device memory of self if possible.
+            If the above is not possible, e.g. the new shape requires larger
+            memory size, or if inplace is False, return a new PitchArray.
+            (default:  True)
         """
         
         sx = 1
@@ -1553,9 +1614,10 @@ class PitchArray(object):
         Convert dtype of self to dtype 
         
         Parameters:
-        -----------------------------------
+        -----------
         dtype: np.dtype
                dtype of the returned array
+        
         """
         dtype = np.dtype(dtype)
         if self.dtype == dtype:
@@ -1628,6 +1690,19 @@ class PitchArray(object):
         return result
     
     def copy_rows(self, start, stop, step = 1):
+        """
+        Extract rows of self to form a new array.
+        
+        Parameters:
+        -----------
+        start: int
+            first row to be extracted
+        stop: int
+            last row to be extracted
+        step: int (optional, default: 1)
+            extract every step row.
+        
+        """
         nrows = len(range(start,stop,step))
         if nrows:
             
@@ -1656,6 +1731,16 @@ class PitchArray(object):
         return result
     
     def view(self, dtype = None):
+        """
+        New view of array with the same data (similar to numpy.ndarary.view)
+        
+        Optional Parameters:
+        --------------------
+        dtype : numpy.dtype
+            Data-type descriptor of the returned view
+        
+        """
+        
         if dtype is None:
             dtype = self.dtype
         old_itemsize = self.dtype.itemsize
@@ -1852,9 +1937,22 @@ def ones_like(other_ary):
 def make_pitcharray(dptr, shape, dtype, linear = False, pitch=None):
     """
     Create a PitchArray from a DeviceAllocation pointer
-    linear: "True" indicates the device memory is a linearly allocated 
-            "False" indicates the device memory is allocated by
-            cudaMallocPitch, and pitch must be provided
+    
+    Parameters:
+    -----------
+    dptr : pycuda.driver.DeviceAllocation
+        pointer to the device memory
+    shape : tuple of ints
+        shape of the array
+    dtype : numpy.dtype
+        data type of the array
+    linear : bool (optional, default: False)
+        "True" indicates the device memory is a linearly allocated
+        "False" indicates the device memory is allocated by
+        cudaMallocPitch, and pitch must be provided
+    pitch : int
+        pitch of the array
+    
     """
     if linear:
         result = PitchArray(shape, dtype)
@@ -1876,7 +1974,8 @@ def arrayg2p(other_gpuarray):
     
     Parameter:
     ---------------------------------
-    other_gpuarray: pycuda.GPUArray
+    other_gpuarray : pycuda.GPUArray
+    
     """
     result = make_pitcharray(
         other_gpuarray.gpudata, other_gpuarray.shape,
@@ -1889,8 +1988,9 @@ def arrayp2g(pary):
     Convert a PitchArray to a GPUArray
     
     Parameter:
-    ---------------------------------
+    ----------
     pary: PitchArray
+    
     """
     from pycuda.gpuarray import GPUArray
     result = GPUArray(pary.shape, pary.dtype)
@@ -1911,8 +2011,9 @@ def conj(pary):
     same as PitchArray.conj(), but create a new copy
     
     Parameter:
-    -------------------------------------
+    ----------
     pary: PitchArray
+    
     """
     return pary.conj(inplace = False)
 
@@ -1923,27 +2024,25 @@ def reshape(pary, shape):
     same as PitchArray.reshape(), but always create a new copy
     
     Parameter:
-    -------------------------------------
+    ----------
     pary: PitchArray
+    
     """
     return pary.reshape(shape, inplace = False)
 
 
 def iscomplexobj(pary):
-    """
-    Check if the array dtype is complex
-    """
+    """ Check if the array dtype is complex """
     return issubclass(pary.dtype.type, np.complexfloating)
 
 
 def isrealobj(pary):
-    """
-    Check if the array dtype is real
-    """
+    """ Check if the array dtype is real """
     return not iscomplexobj(pary)
 
 
 def issingle(dtype):
+    """ Check if dtype is single floating point """
     if dtype in [np.float32, np.complex64]:
         return True
     elif dtype in [np.float64, np.complex128]:
@@ -1954,6 +2053,7 @@ def issingle(dtype):
         
 
 def floattocomplex(dtype):
+    """ Conver dtype from real to corresponding complex dtype """
     dtype = dtype.type if isinstance(dtype, np.dtype) else dtype
     if issubclass(dtype, np.complexfloating):
         outdtype = dtype
@@ -1968,6 +2068,7 @@ def floattocomplex(dtype):
 
 
 def complextofloat(dtype):
+    """ convert dtype from complex to corresponding real dtype """
     dtype = dtype.type if isinstance(dtype, np.dtype) else dtype
     if not issubclass(dtype, np.complexfloating):
         outdtype = dtype
@@ -1996,6 +2097,7 @@ def make_complex(real, imag):
     ---------------------------------
     out: PitchArray
          The complex array
+         
     """
     if isinstance(real, np.ndarray):
         real = to_gpu(real)
@@ -2032,6 +2134,7 @@ def make_complex(real, imag):
     return result
 
 def angle(array):
+    """ Returns the angle of each element in a complex array """
     if isrealobj(array):
         if issingle(array.dtype):
             return parray.zeros(array.shape, np.float32)
@@ -2057,7 +2160,23 @@ def angle(array):
         return result
 
 
-
+def complex_from_amp_phase(amp, phase):
+    """ Returns the angle of each element in a complex array """
+    result = empty(amp.shape, dtype = floattocomplex(amp.dtype))
+    
+    if amp.M == 1:
+        func = pu.get_complex_from_amp_function(amp.dtype, result.dtype, pitch = False)
+        func.prepared_call(
+            amp._grid, amp._block, result.gpudata,
+            amp.gpudata, phase.gpudata, amp.size)
+    else:
+        func = pu.get_complex_from_amp_function(
+            amp.dtype, result.dtype, pitch = True)
+        func.prepared_call(
+            amp._grid, amp._block, amp.M, amp.N,
+            result.gpudata, result.ld, amp.gpudata,
+            phase.gpudata, amp.ld)
+    return result
 
 
 

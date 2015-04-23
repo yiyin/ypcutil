@@ -24,7 +24,7 @@ def get_curand_int_func():
 #include "curand_kernel.h"
 extern "C" {
 __global__ void 
-rand_setup(curandStateXORWOW* state, int size, unsigned long long seed)
+rand_setup(curandStateXORWOW_t* state, int size, unsigned long long seed)
 {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
     int total_threads = blockDim.x * gridDim.x;

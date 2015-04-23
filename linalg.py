@@ -14,6 +14,7 @@ import simpleio as si
 
 """ assuming row major storage as in PitchArray """
 class cublashandle(object):
+    """ Create a cublas handle """
     def __init__(self):
         self.handle = None
         self.create()
@@ -39,8 +40,8 @@ def dot(A, B, opa = 'n', opb = 'n',
     Specified C must have the same leading dimension as that of the result and
     the other dimension must be bigger or equal to that of the result.
     
-    Parameters
-    ------------------------------------
+    Parameters:
+    -----------
     A: parray.PitchArray
     B: parray.PitchArray
     opa: str
@@ -65,6 +66,7 @@ def dot(A, B, opa = 'n', opb = 'n',
             result will be C = C*Cscale + scale*A*B
     
     Note:
+    -----
     works only for CUDA VERSION > 4.0 where handle is introduced.
     """
     
@@ -147,15 +149,6 @@ def dot(A, B, opa = 'n', opb = 'n',
     handlestr = "handle.handle"
     if m == 1:
         if n == 1:
-            #alpha = A.get()[0,0]
-            #cuda.memcpy_dtod(int(C.gpudata) + Cstart * itemsize, 
-            #                 B.gpudata, l*dtype.itemsize)
-            #if opa in ['c','C']:
-            #    alpha = np.conj(alpha)
-            #if opb in ['c', 'C']:
-            #    C.conj()
-            #func = (tp+"scal(l, alpha*scale, int(C.gpudata) + "
-            #        "Cstart * itemsize, 1)")
             alpha = A.get()[0,0]
             if opa in ['c','C']:
                 alpha = np.conj(alpha)
@@ -181,53 +174,30 @@ def dot(A, B, opa = 'n', opb = 'n',
             else:
                 if opa in ['c','C']:
                     if opb in ['c', 'C']:
-                        #func = ("C.set(np.array(" + tp
-                        #        + "dotu(n, A.gpudata, 1, B.gpudata, 1)"
-                        #        +").conj())")
                         func = ("C.set(np.array(scale*" + tp
                                 + "dotu(handle.handle, n, A.gpudata, "
                                 + "1, B.gpudata, 1)"
                                 +").conj()+C.get()*Cscale)")
                     else:
-                        #func = ("C.set(np.array(" + tp
-                        #        + "dotc(n, A.gpudata, 1, B.gpudata, 1)"
-                        #        +"))")
                         func = ("C.set(np.array(scale*" + tp
                                 + "dotc(handle.handle, n, A.gpudata, "
                                 + "1, B.gpudata, 1)) + C.get()*Cscale)")
                 elif opb in ['c', 'C']:
-                    #func = ("C.set(np.array(" + tp
-                    #        + "dotc(n, B.gpudata, 1, A.gpudata, 1)" +"))")
                     func = ("C.set(np.array(scale*" + tp
                             + "dotc(handle.handle, n, B.gpudata, 1, "
                             + "A.gpudata, 1)) + C.get()*Cscale)")
                 else:
                     if complex_type:
-                        #func = ("C.set(np.array(" + tp
-                        #        + "dotu(n, A.gpudata, 1, B.gpudata, 1)"
-                        #        +"))")
                         func = ("C.set(np.array(scale*" + tp
                                 + "dotu(handle.handle, n, A.gpudata, 1, "
                                 + "B.gpudata, 1)) + C.get()*Cscale)")
                     else:
-                        #func = ("C.set(np.array(" + tp
-                        #        + "dot(n, A.gpudata, 1, B.gpudata, 1)"
-                        #        +"))")
                         func = ("C.set(np.array(scale*" + tp
                                 + "dot(handle.handle, n, A.gpudata, 1, "
                                 + "B.gpudata, 1)) + C.get()*Cscale)")
     else:#m!=1
         if n == 1:
             if l == 1:
-                #alpha = B.get()[0,0]
-                #cuda.memcpy_dtod(int(C.gpudata) + Cstart * itemsize, 
-                #                 A.gpudata, m*dtype.itemsize)
-                #if opa in ['c','C']:
-                #    alpha = np.conj(alpha)
-                #if opb in ['c', 'C']:
-                #    C.conj()
-                #func = (tp+"scal(m, alpha, int(C.gpudata) "
-                #        "+ Cstart * itemsize,1)")
                 alpha = B.get()[0,0]
                 if opb in ['c','C']:
                     alpha = np.conj(alpha)
@@ -241,7 +211,6 @@ def dot(A, B, opa = 'n', opb = 'n',
                             + "A.gpudata, 1, "
                             + "int(C.gpudata)+Cstart*itemsize, 1)")
             else:
-                #C.fill(0)
                 C*=Cscale
                 if opa in ['c','C']:
                     if opb in ['c', 'C']:
@@ -322,8 +291,7 @@ def dot(A, B, opa = 'n', opb = 'n',
                         + "l, m, k, scale, B.gpudata, B.ld, A.gpudata, A.ld, "
                         + "Cscale, int(C.gpudata) + "
                         + "Cstart * itemsize * C.ld, C.ld)")
-    #if cublas._libcublas_ctx is None:
-    #    cublas.cublasInit()
+
     if handle is None:
         handle = cublashandle()
     eval(func)
@@ -795,7 +763,7 @@ def FISTA_l2(A, b, L = 1, steps=5000):
         t_k = t_kp1
         
         if i%x_steps == 0:
-            ynorm = la.norm(err, handle = handle)
+            ynorm = norm(err, handle = handle)
             print "%d, norm = %.10f, time=%f(ms)" % (
                   i / x_steps, ynorm, (time.time()-start)*1000)
     return xk
