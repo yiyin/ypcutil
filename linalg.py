@@ -888,7 +888,7 @@ __global__ void err_update( %(type)s* err, %(type)s* b,
     """
     mod = SourceModule(template % {"type": dtype_to_ctype(dtype)})
     func = mod.get_function("err_update")
-    func.prepare([np.intp, np.intp, np.intp, np.int32, np.int32])
+    func.prepare('PPPii')#[np.intp, np.intp, np.intp, np.int32, np.int32])
     return func
 
 
@@ -915,8 +915,8 @@ __global__ void update(%(type)s* xk, %(type)s* yk, %(type)s* temp,
     """
     mod = SourceModule(template % {"type": dtype_to_ctype(dtype)})
     func = mod.get_function("update")
-    func.prepare([np.intp, np.intp, np.intp, np.int32, np.int32,
-                 np.double if dtype == np.double else np.float32])
+    func.prepare('PPPii'+np.dtype(dtype).char)#[np.intp, np.intp, np.intp, np.int32, np.int32,
+    #             np.double if dtype == np.double else np.float32])
     return func
 
 
@@ -958,9 +958,9 @@ sq_Kernel(%(types)s* d_S, %(typeq)s* d_q, %(types)s rcond, int size)
     mod = SourceModule(template % {"types": dtype_to_ctype(dtype_s), 
                        "typeq": dtype_to_ctype(dtype_q)})
     func = mod.get_function("sq_Kernel")
-    func.prepare([np.intp, np.intp,
-                 np.double if dtype_s == np.double else np.float32,
-                 np.int32])
+    func.prepare('PP'+np.dtype(dtype_s).char+'i')#[np.intp, np.intp,
+    #             np.double if dtype_s == np.double else np.float32,
+    #             np.int32])
     return func
 
 
@@ -996,9 +996,9 @@ eigsq_Kernel(%(types)s* d_S, %(typeq)s* d_q, %(types)s thres, int size)
                        "typeq": dtype_to_ctype(dtype_q),
                        "iff": "f" if dtype_q == np.float32 else ""})
     func = mod.get_function("eigsq_Kernel")
-    func.prepare([np.intp, np.intp, 
-                  np.double if dtype_s == np.double else np.float32,
-                  np.int32])
+    func.prepare('PP'+np.dtype(dtype_s).char+'i')#[np.intp, np.intp,
+    #              np.double if dtype_s == np.double else np.float32,
+    #              np.int32])
     return func
 
 
@@ -1038,8 +1038,8 @@ sinv_Kernel(%(types)s* d_S, %(types)s rcond, int size)
     """
     mod = SourceModule(template % {"types": dtype_to_ctype(dtype_s)})
     func = mod.get_function("sinv_Kernel")
-    func.prepare([np.intp, np.double if dtype == np.double else np.float32,
-                 np.int32])
+    func.prepare('P'++np.dtype(dtype).char+'i')#[np.intp, np.double if dtype == np.double else np.float32,
+    #            np.int32])
     return func
 
 
@@ -1083,8 +1083,8 @@ svinv_Kernel(%(types)s* d_S, %(typev)s* d_V, int ld,
                        "types": dtype_to_ctype(dtype_s),
                        "typev": dtype_to_ctype(dtype_v)})
     func = mod.get_function("svinv_Kernel")
-    func.prepare([np.intp, np.intp, np.int32, np.int32,
-                 np.double if dtype_s == np.double else np.float32])
+    func.prepare('PPii'+np.dtype(dtype_s).char)#[np.intp, np.intp, np.int32, np.int32,
+    #             np.double if dtype_s == np.double else np.float32])
     return func
 
 
@@ -1105,9 +1105,9 @@ __global__ void adddiag(%(type)s* A, int ld, %(type)s value, int N)
     """
     mod = SourceModule(template % {"type": dtype_to_ctype(dtype)})
     func = mod.get_function("adddiag")
-    func.prepare(
-        [np.intp, np.int32,
-        dtype.type if isinstance(dtype, np.dtype) else dtype,
-        np.int32])
+    func.prepare('Pi'+np.dtype(dtype).char+'i')
+    #    [np.intp, np.int32,
+    #    dtype.type if isinstance(dtype, np.dtype) else dtype,
+    #    np.int32])
     return func
 
