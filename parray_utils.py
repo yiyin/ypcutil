@@ -340,6 +340,76 @@ def get_addscalar_function(src_type, dest_type, pitch = True):
         func.prepare('PP'+np.dtype(dest_type).char+'i')#[np.intp, np.intp, _get_type(dest_type), np.int32])
     return func
 
+@context_dependent_memoize
+def get_powarray_function(left_dtype, right_dtype,
+                          rslt_dtype, pitch = True):
+    type_left = dtype_to_ctype(left_dtype)
+    type_right = dtype_to_ctype(right_dtype)
+    type_rslt = dtype_to_ctype(rslt_dtype)
+
+    name = "powarray"
+    operation = "pow"
+    
+    if pitch:
+        func = SourceModule(
+                pitch_array_func_template % {
+                    "name": name,
+                    "dest_type": type_rslt,
+                    "left_type": type_left,
+                    "right_type": type_right,
+                    "operation": operation,
+                    "fletter": 'f' if left_dtype == np.float32 else '',
+                },
+                options=["--ptxas-options=-v"]).get_function(name)
+        func.prepare('iiPiPiPi')#[np.int32, np.int32, np.intp, np.int32,
+        #              np.intp, np.int32, np.intp, np.int32])
+    else:
+        func = SourceModule(
+                non_pitch_array_func_template % {
+                    "name": name,
+                    "dest_type": type_rslt,
+                    "left_type": type_left,
+                    "right_type": type_right,
+                    "operation": operation,
+                    "fletter": 'f' if left_dtype == np.float32 else ''
+                },
+                options=["--ptxas-options=-v"]).get_function(name)
+        func.prepare('PPPi')#[np.intp, np.intp, np.intp, np.int32])
+    return func
+
+
+@context_dependent_memoize
+def get_powscalar_function(src_type, dest_type, pitch = True):
+    type_src = dtype_to_ctype(src_type)
+    type_dest = dtype_to_ctype(dest_type)
+    name = "powscalar"
+    operation = "pow"
+    
+    if pitch:
+        func = SourceModule(
+                pitch_left_scalar_func_template % {
+                    "name": name,
+                    "src_type": type_src,
+                    "dest_type": type_dest,
+                    "operation": operation,
+                    "fletter": 'f' if src_type == np.float32 else '',
+                },
+                options=["--ptxas-options=-v"]).get_function(name)
+        func.prepare('iiPiPi'+np.dtype(dest_type).char)#[np.int32, np.int32, np.intp, np.int32,
+        #              np.intp, np.int32, _get_type(dest_type)])
+    else:
+        func = SourceModule(
+                non_pitch_left_scalar_func_template % {
+                    "name": name,
+                    "src_type": type_src,
+                    "dest_type": type_dest,
+                    "operation": operation,
+                    "fletter": 'f' if src_type == np.float32 else '',
+                },
+                options=["--ptxas-options=-v"]).get_function(name)
+        func.prepare('PP'+np.dtype(dest_type).char+'i')#[np.intp, np.intp, _get_type(dest_type), np.int32])
+    return func
+
 
 @context_dependent_memoize
 def get_subarray_function(left_dtype, right_dtype, rslt_dtype, pitch = True):
@@ -1290,3 +1360,156 @@ __global__ void
 
 """
 
+
+pitch_array_func_template = pycuda_complex_header + """
+__global__ void
+%(name)s(const int M, const int N, %(dest_type)s *dest,
+         const int ld_dest, const %(left_type)s *left,
+         const int ld_left, const %(right_type)s *right,
+         const int ld_right)
+{
+    //M is the number of rows, N is the number of columns
+    const int tid = threadIdx.x;
+    const int sid = threadIdx.y + blockDim.y * blockIdx.x;
+    const int total = gridDim.x * blockDim.y;
+
+    int m, n, idx;
+    %(left_type)s tmp_left;
+    %(right_type)s tmp_right;
+    int segment_per_row = ((N - 1) >> 5) + 1;
+    int total_segments = M * segment_per_row;
+        
+    for(int i = sid; i < total_segments; i+=total)
+    {
+        m = i / segment_per_row;
+        n = i %% segment_per_row;
+        idx = (n<<5) + tid;
+        if(idx < N)
+        {
+            tmp_left = left[m * ld_left + idx];
+            tmp_right = right[m * ld_right + idx];
+            dest[m * ld_dest + idx] = %(operation)s%(fletter)s((tmp_left) , (tmp_right));
+        }
+    }
+}
+
+"""
+
+non_pitch_array_func_template = pycuda_complex_header + """
+__global__ void
+%(name)s(%(dest_type)s *dest, const %(left_type)s *left,
+         const %(right_type)s *right, const int N)
+{
+    const int totalthreads = blockDim.x * gridDim.x;
+    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+
+    %(left_type)s tmp_left;
+    %(right_type)s tmp_right;
+
+    for (int i = tid; i < N; i += totalthreads)
+    {
+        tmp_left = left[i];
+        tmp_right = right[i];
+        dest[i] = %(operation)s%(fletter)s((tmp_left) , (tmp_right));
+    }
+}
+
+"""
+
+
+pitch_left_scalar_func_template = pycuda_complex_header + """
+__global__ void
+%(name)s(const int M, const int N, %(dest_type)s *dest,
+         const int ld_dest, const %(src_type)s *left,
+         const int ld_left, const %(dest_type)s right)
+{
+    //M is the number of rows, N is the number of columns
+    const int tid = threadIdx.x;
+    const int sid = threadIdx.y + blockDim.y * blockIdx.x;
+    const int total = gridDim.x * blockDim.y;
+    int m, n, idx;
+    %(src_type)s tmp_left;
+    int segment_per_row = ((N - 1) >> 5) + 1;
+    int total_segments = M * segment_per_row;
+    
+    for(int i = sid; i < total_segments; i+=total)
+    {
+        m = i / segment_per_row;
+        n = i %% segment_per_row;
+        idx = (n<<5) + tid;
+        if(idx < N)
+        {
+            tmp_left = left[m * ld_left + idx];
+            dest[m * ld_dest + idx] = %(operation)s%(fletter)s((tmp_left) , (right));
+        }
+    }
+}
+
+"""
+
+non_pitch_left_scalar_func_template = pycuda_complex_header + """
+__global__ void
+%(name)s(%(dest_type)s *dest, const %(src_type)s *left,
+         const %(dest_type)s right, const int N)
+{
+    const int totalthreads = blockDim.x * gridDim.x;
+    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+
+    %(src_type)s tmp_left;
+    for (int i = tid; i < N; i += totalthreads)
+    {
+        tmp_left = left[i];
+        dest[i] = %(operation)s%(fletter)s((tmp_left) , (right));
+    }
+}
+
+"""
+
+pitch_right_scalar_func_template = pycuda_complex_header + """
+__global__ void
+%(name)s(const int M, const int N, %(dest_type)s *dest,
+         const int ld_dest, const %(src_type)s *left,
+         const int ld_left, const %(dest_type)s right)
+{
+    //M is the number of rows, N is the number of columns
+    const int tid = threadIdx.x;
+    const int sid = threadIdx.y + blockDim.y * blockIdx.x;
+    const int total = gridDim.x * blockDim.y;
+
+    int m, n, idx;
+    %(src_type)s tmp_left;
+    int segment_per_row = ((N - 1) >> 5) + 1;
+    int total_segments = M * segment_per_row;
+    
+    for(int i = sid; i < total_segments; i+=total)
+    {
+        m = i / segment_per_row;
+        n = i %% segment_per_row;
+        idx = (n<<5) + tid;
+        if(idx < N)
+        {
+            tmp_left = left[m * ld_left + idx];
+            dest[m * ld_dest + idx] = %(operation)s%(fletter)s((right) , (tmp_left));
+        }
+    }
+}
+
+"""
+
+non_pitch_right_scalar_func_template = pycuda_complex_header + """
+__global__ void
+%(name)s(%(dest_type)s *dest, const %(dest_type)s *left,
+         const %(src_type)s right, const int N)
+{
+    const int totalthreads = blockDim.x * gridDim.x;
+    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+
+    %(src_type)s tmp_left;
+    for (int i = tid; i < N; i += totalthreads)
+    {
+        tmp_left = left[i];
+        dest[i] = %(operation)s%(fletter)s((right) , (tmp_left));
+    }
+}
+
+"""

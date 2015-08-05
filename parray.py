@@ -1095,6 +1095,120 @@ class PitchArray(object):
             raise TypeError("type of object to be divided"
                             "is not supported")
 
+    def __pow__(self, other):
+        if isinstance(other, PitchArray):
+            if self.shape != other.shape:
+                raise ValueError("array dimension misaligned")
+            result = self._new_like_me(_get_common_dtype(self, other))
+            if self.size:
+                if self.M == 1:
+                    func = pu.get_powarray_function(
+                        self.dtype, other.dtype, result.dtype, pitch = False)
+                    func.prepared_call(
+                        self._grid, self._block, result.gpudata,
+                        self.gpudata, other.gpudata, self.size)
+                else:
+                    func = pu.get_powarray_function(
+                        self.dtype, other.dtype, result.dtype, pitch = True)
+                    func.prepared_call(
+                        self._grid, self._block, self.M, self.N,
+                        result.gpudata, result.ld, self.gpudata,
+                        self.ld, other.gpudata, other.ld)
+            return result
+        elif issubclass(type(other), (float, int, complex, np.integer,
+                                      np.floating, np.complexfloating)):
+            dtype = _get_common_dtype_with_scalar(other, self)
+            if other == 0:
+                return self.astype(dtype)
+            else:
+                result = self._new_like_me(dtype)
+                if self.size:
+                    if self.M == 1:
+                        func = pu.get_powscalar_function(
+                            self.dtype, dtype, pitch = False)
+                        func.prepared_call(
+                            self._grid, self._block, result.gpudata,
+                            self.gpudata, other, self.size)
+                    else:
+                        func = pu.get_powscalar_function(
+                            self.dtype, dtype, pitch = True)
+                        func.prepared_call(
+                            self._grid, self._block, self.M, self.N,
+                            result.gpudata, result.ld, self.gpudata,
+                            self.ld, other)
+                return result
+        else:
+            raise TypeError("type of object to be powered is not supported")
+
+    def __iadd__(self, other):
+        """
+        add to self inplace
+        
+        Parameters
+        ----------
+        other: scalar or Pitcharray
+        
+        Returns
+        -------
+        out : PitchArray (self)
+        
+        Note
+        ----
+        If other is complex, self is required to be a complex
+        """
+        if isinstance(other, PitchArray):
+            if self.shape != other.shape:
+                raise ValueError("array dimension misaligned")
+            dtype = _get_common_dtype(self, other)
+            if self.dtype == dtype:
+                result = self
+            else:
+                result = self._new_like_me(dtype = dtype)
+                
+            if self.size:
+                if self.M == 1:
+                    func = pu.get_powarray_function(
+                        self.dtype, other.dtype, result.dtype, pitch = False)
+                    func.prepared_call(
+                        self._grid, self._block, result.gpudata,
+                        self.gpudata, other.gpudata, self.size)
+                else:
+                    func = pu.get_powarray_function(
+                        self.dtype, other.dtype, result.dtype, pitch = True)
+                    func.prepared_call(self._grid, self._block,
+                        self.M, self.N, result.gpudata, result.ld,
+                        self.gpudata, self.ld, other.gpudata, other.ld)
+            return result
+        elif issubclass(type(other), (float, int, complex, np.integer,
+                                      np.floating, np.complexfloating)):
+            dtype = _get_common_dtype_with_scalar(other, self)
+            if other == 0:
+                return self.astype(dtype)
+            else:
+                if self.dtype != dtype:
+                    result = self._new_like_me(dtype)
+                else:
+                    result = self
+                if self.size:
+                    if self.M == 1:
+                        func = pu.get_powscalar_function(
+                            self.dtype, dtype, pitch = False)
+                        func.prepared_call(
+                            self._grid, self._block, result.gpudata,
+                            self.gpudata, other, self.size)
+                    else:
+                        func = pu.get_powscalar_function(
+                            self.dtype, dtype, pitch = True)
+                        func.prepared_call(
+                            self._grid, self._block, self.M, self.N,
+                            result.gpudata, self.ld, self.gpudata,
+                            self.ld, other)
+                return result
+        else:
+            raise TypeError("type of object to be powered"
+                            "is not supported")
+
+
     def add(self, other):
         """
         add other to self
