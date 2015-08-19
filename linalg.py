@@ -68,6 +68,9 @@ def dot(A, B, opa = 'n', opb = 'n',
     Note:
     -----
     works only for CUDA VERSION > 4.0 where handle is introduced.
+    
+    Will NOT work for complex case when A and B shares overlapping
+    memory, but should work if A==B.
     """
     
     if A.dtype != B.dtype:
