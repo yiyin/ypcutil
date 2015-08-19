@@ -145,6 +145,8 @@ def dot(A, B, opa = 'n', opb = 'n',
     conjB = False
     conjC = False
     
+    sameflag = (A==B)
+    
     itemsize = C.dtype.itemsize
     handlestr = "handle.handle"
     if m == 1:
@@ -216,7 +218,6 @@ def dot(A, B, opa = 'n', opb = 'n',
                     if opb in ['c', 'C']:
                         B.conj()
                         conjB = True
-                        print l, m, scale, C.shape
                         func = (tp + "gerc(handle.handle, l, m, scale, "
                                 + "B.gpudata, 1, A.gpudata, 1, "
                                 + "int(C.gpudata)+Cstart*itemsize*C.ld, "
@@ -227,11 +228,19 @@ def dot(A, B, opa = 'n', opb = 'n',
                                 + "int(C.gpudata)+Cstart*itemsize*C.ld, "
                                 + "C.ld)")
                 elif opb in ['c', 'C']:
-                    B.conj()
-                    conjB = True
-                    func = (tp + "geru(handle.handle, l, m, scale, "
-                            + "B.gpudata, 1, A.gpudata, 1, "
-                            + "int(C.gpudata)+Cstart*itemsize*C.ld, C.ld)")
+                    if sameflag:
+                        B.conj()
+                        conjB = True
+                        func = (tp + "gerc(handle.handle, l, m, scale, "
+                                + "B.gpudata, 1, A.gpudata, 1, "
+                                + "int(C.gpudata)+Cstart*itemsize*C.ld, C.ld)")
+                    
+                    else:
+                        B.conj()
+                        conjB = True
+                        func = (tp + "geru(handle.handle, l, m, scale, "
+                                + "B.gpudata, 1, A.gpudata, 1, "
+                                + "int(C.gpudata)+Cstart*itemsize*C.ld, C.ld)")
                 else:
                     if complex_type:
                         func = (tp + "geru(handle.handle, l, m, scale, "
@@ -609,6 +618,9 @@ def solve_eq_sym(G, q, rcond = 1e-8, save_singular = None, cut_num = None):
     out: PitchArray vector
          solution c
     """
+    if rcond is None:
+        rcond = 1e-8
+    
     if G.dtype != q.dtype:
         raise TypeError("G,q must be of the same dtype")
     
