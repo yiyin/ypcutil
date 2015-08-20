@@ -873,7 +873,7 @@ class PitchArray(object):
                                       np.floating, np.complexfloating)):
             dtype = _get_common_dtype_with_scalar(other, self)
             if other == 0:
-                return self.astype(dtype)
+                return self
             else:
                 if self.dtype != dtype:
                     result = self._new_like_me(dtype)
@@ -938,7 +938,7 @@ class PitchArray(object):
                                       np.floating, np.complexfloating)):
             dtype = _get_common_dtype_with_scalar(other, self)
             if other == 0:
-                return self.astype(dtype)
+                return self
             else:
                 if self.dtype != dtype:
                     result = self._new_like_me(dtype)
@@ -1004,7 +1004,7 @@ class PitchArray(object):
                                       np.floating, np.complexfloating)):
             dtype = _get_common_dtype_with_scalar(other, self)
             if other == 1.0:
-                return self.astype(dtype)
+                return self
             else:
                 if self.dtype != dtype:
                     result = self._new_like_me(dtype)
@@ -1070,7 +1070,7 @@ class PitchArray(object):
                                       np.floating, np.complexfloating)):
             dtype = _get_common_dtype_with_scalar(other, self)
             if other == 1.0:
-                return self.astype(dtype)
+                return self
             else:
                 if self.dtype != dtype:
                     result = self._new_like_me(dtype)
@@ -1140,7 +1140,7 @@ class PitchArray(object):
         else:
             raise TypeError("type of object to be powered is not supported")
 
-    def __iadd__(self, other):
+    def __ipow__(self, other):
         """
         add to self inplace
         
