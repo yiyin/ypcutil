@@ -42,7 +42,7 @@ def rnn1(G, q, dt = 1e-6, alpha = 5000, steps = 4000,
     handle = la.cublashandle()
     for i in range(steps+1):
         Gc = la.dot(G, c, handle = handle)
-        err_func.prepared_call(grid, (256,1,1), y.gpudata, q.gpuata,
+        err_func.prepared_call(grid, (256,1,1), y.gpudata, q.gpudata,
                                Gc.gpudata, c.gpudata, lamb, c.size, 1)        
         Gc = la.dot(G, y, opa='t', handle = handle)
         update_func.prepared_call(grid, (256,1,1), c.gpudata, Gc.gpudata,
@@ -542,7 +542,7 @@ rnn2_c_update(%(type)s* d_xp, %(type)s* d_xm, %(type)s* d_c,
     return func
 
 
-def rnn3(G, q, dt = 1e-6, alpha = 5000, steps = 4000, XOUTPUTSTEPS = None):
+def rnn3(G, q, dt = 1e-6, alpha = 5000, steps = 4000, XOUTPUTSTEPS = None, init=None):
     if G.dtype != q.dtype:
         raise TypeError("matrix multiplication must have same dtype")
     if np.iscomplexobj(G):
@@ -557,7 +557,10 @@ def rnn3(G, q, dt = 1e-6, alpha = 5000, steps = 4000, XOUTPUTSTEPS = None):
         fullout = True
         x_steps = steps / int(XOUTPUTSTEPS)
         output = parray.empty((XOUTPUTSTEPS, q.size), q.dtype)
-    c = parray.zeros_like(q)
+    if init:
+        c = init.copy()
+    else:
+        c = parray.zeros_like(q)
     update_func = _get_rnn3_update_func(G.dtype)
     dt = float(dt)
     alpha = float(alpha)
