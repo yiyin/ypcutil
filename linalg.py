@@ -216,7 +216,10 @@ def dot(A, B, opa = 'n', opb = 'n',
                             + "A.gpudata, 1, "
                             + "int(C.gpudata)+Cstart*itemsize, 1)")
             else:
-                C*=Cscale
+                if Cempty:
+                    C.fill(0)
+                else:
+                    C*=Cscale
                 if opa in ['c','C']:
                     if opb in ['c', 'C']:
                         B.conj()
@@ -599,7 +602,7 @@ def solve_eq(G, q, rcond = 1e-8):
     return result
 
     
-def solve_eq_sym(G, q, rcond = 1e-8, save_singular = None, cut_num = None):
+def solve_eq_sym(G, q, rcond = 1e-8, save_singular = None, cut_num = None, disp_rcond=False):
     """
     solves Gc = q using pseudo-inversion via SVD, 
     with G a self-adjoint matrix
@@ -644,7 +647,8 @@ def solve_eq_sym(G, q, rcond = 1e-8, save_singular = None, cut_num = None):
             rcond = (S[cut_num].get()+S[cut_num-1].get())/2/S[0].get()
     
     qq = dot(U, q, opa='c')
-    print "using absolute rcond:", S[0].get()*rcond, "in inversion"
+    if disp_rcond:
+        print "using absolute rcond:", S[0].get()*rcond, "in inversion"
     
     sq_func = _get_sq_kernel(S.dtype, qq.dtype)
     sq_func.prepared_call(
@@ -652,6 +656,67 @@ def solve_eq_sym(G, q, rcond = 1e-8, save_singular = None, cut_num = None):
         (256,1,1), S.gpudata, qq.gpudata, rcond, S.size)
     result = dot(U, qq)
     return result
+
+def solve_eq_sym_mixed(G, qr, qi, rcond = 1e-8, save_singular = None, cut_num = None):
+    """
+    solves Gc = qr+1j*qi using pseudo-inversion via SVD, 
+    with G a real symmetric matrix
+
+    Parameters
+    -------------------------------------
+    G: PitchArray, a self-adjoint matrix
+       Its gpudata will be destroyed after calling the function
+    q: PitchArray
+       dtype of G and q must b the same
+    rcond:  float
+            Cutoff for small singular values.
+            Singular values smaller (in modulus) than
+            `rcond` * largest_singular_value (again, in modulus)
+            are set to zero
+
+    Returns
+    --------------------------------------
+    out: PitchArray vector
+         solution c
+    """
+    if G.dtype != qr.dtype:
+        raise TypeError("G,qr must be of the same dtype")
+    if G.dtype != qi.dtype:
+        raise TypeError("G,qr must be of the same dtype")
+    
+    if G.shape[0] != G.shape[1]:
+        raise ValueError("G must be square matrix")
+
+    if G.shape[1] != qr.size:
+        raise ValueError("number of columns of G must be "
+                         "the same of size of q")
+    U,S = svd(G, compute_v=0)
+    if save_singular is not None:
+        si.write_memory_to_file(S, save_singular)
+
+    if cut_num is not None:
+        if cut_num >= S.size:
+            rcond = 1e-7
+        else:
+            rcond = (S[cut_num].get()+S[cut_num-1].get())/2/S[0].get()
+    
+    qqr = dot(U, qr, opa='c')
+    print "using absolute rcond:", S[0].get()*rcond, "in inversion"
+    
+    sq_func = _get_sq_kernel(S.dtype, qqr.dtype)
+    sq_func.prepared_call(
+        (6 * cuda.Context.get_device().MULTIPROCESSOR_COUNT, 1),
+        (256,1,1), S.gpudata, qqr.gpudata, rcond, S.size)
+    resultr = dot(U, qqr)
+
+    qqi = dot(U, qi, opa='c')
+    
+    sq_func.prepared_call(
+        (6 * cuda.Context.get_device().MULTIPROCESSOR_COUNT, 1),
+        (256,1,1), S.gpudata, qqi.gpudata, rcond, S.size)
+    resulti = dot(U, qqi)
+    
+    return parray.make_complex(resultr, resulti)
 
     
 def eig_sym(G, compute_z = True, uplo = 'U'):
