@@ -181,7 +181,6 @@ def PitchTrans(shape, dst, dst_ld, src, src_ld, dtype, aligned=False,
         
 """end of utilities"""  
 
-
 class PitchArray(object):
     def __init__(self, shape, dtype, gpudata=None, pitch = None, base = None):
         """
@@ -1532,11 +1531,15 @@ class PitchArray(object):
                     self._grid, self._block, self.M, self.N,
                     self.gpudata, self.ld, value)
     
-    def copy(self):
+    def copy(self, result=None):
         """
         Returns a duplicated copy of self
         """
-        result = self._new_like_me()
+        if not result:
+            result = self._new_like_me()
+        else:
+            assert(self.dtype == result.dtype)
+            assert(self.mem_size == result.mem_size)
         if self.size:
             cuda.memcpy_dtod(
                 result.gpudata, self.gpudata,
