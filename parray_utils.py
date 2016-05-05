@@ -736,6 +736,34 @@ def get_complex_from_amp_function(in_type, result_type, pitch = True):
         func.prepare('PPPi')#[np.intp, np.intp, np.intp, np.int32])
     return func
 
+@context_dependent_memoize
+def get_bsxfun_function(array_type, vector_type, result_type,
+                        operator, direction, order, pitch = True):
+    type_array = dtype_to_ctype(array_type)
+    type_vector = dtype_to_ctype(vector_type)
+    type_result = dtype_to_ctype(result_type)
+
+    name = "bsxfun"
+
+    possibles = globals().copy()
+    possibles.update(locals())
+#    method = possibles.get(method_name)
+    if pitch:
+        func = SourceModule(
+                possibles.get("pitch_bsxfun_"+order+"_"+direction+"_template") % {
+                    "name": name,
+                    "array_type": type_array,
+                    "vector_type": type_vector,
+                    "result_type": type_result,
+                    "operator": operator
+               },
+               options=["--ptxas-options=-v"]).get_function(name)
+        func.prepare('PiPPii')
+    else:
+        raise NotImplementedError
+
+    return func
+
 
 """templates"""
             
@@ -1509,6 +1537,143 @@ __global__ void
     {
         tmp_left = left[i];
         dest[i] = %(operation)s%(fletter)s((right) , (tmp_left));
+    }
+}
+
+"""
+
+
+pitch_bsxfun_right_row_template = pycuda_complex_header + """
+__global__ void
+%(name)s(%(array_type)s *array, int array_ld, %(vector_type)s *vector,
+         %(result_type)s *result, int result_ld, int N)
+{
+    // N: number of rows
+    const int tidx = threadIdx.x;
+    const int tidy = threadIdx.y;
+    const int bidx = blockIdx.x;
+    const int bidy = blockIdx.y;
+    const int dimy = blockDim.y;
+    
+    int col = bidx *32 + tidx;
+    __shared__ %(vector_type)s v[32];
+    
+    if(tidy == 0)
+    {
+        v[tidx] = vector[bidx*32+tidx]; //vector[bidy*32+tidx];
+    }
+    
+    __syncthreads();
+    
+    if(col < array_ld)
+    {
+        for(int i = tidy + bidy*32; i < min(N, (bidy+1)*32); i += dimy)
+        {
+            result[i*result_ld+col] = array[i*array_ld+col] %(operator)s v[tidx];
+        }
+    }
+}
+
+"""
+
+
+pitch_bsxfun_left_row_template = pycuda_complex_header + """
+__global__ void
+%(name)s(%(array_type)s *array, int array_ld, %(vector_type)s *vector,
+         %(result_type)s *result, int result_ld, int N)
+{
+    // N: number of rows
+    const int tidx = threadIdx.x;
+    const int tidy = threadIdx.y;
+    const int bidx = blockIdx.x;
+    const int bidy = blockIdx.y;
+    const int dimy = blockDim.y;
+    
+    int col = bidx *32 + tidx;
+    __shared__ %(vector_type)s v[32];
+    
+    if(tidy == 0)
+    {
+        v[tidx] = vector[bidx*32+tidx]; //vector[bidy*32+tidx];
+    }
+    
+    __syncthreads();
+    
+    if(col < array_ld)
+    {
+        for(int i = tidy + bidy*32; i < min(N, (bidy+1)*32); i += dimy)
+        {
+            result[i*result_ld+col] = v[tidx] %(operator)s array[i*array_ld+col];
+        }
+    }
+}
+
+"""
+
+pitch_bsxfun_right_col_template = pycuda_complex_header + """
+__global__ void
+%(name)s(%(array_type)s *array, int array_ld, %(vector_type)s *vector,
+         %(result_type)s *result, int result_ld, int N)
+{
+    // N: number of rows
+    const int tidx = threadIdx.x;
+    const int tidy = threadIdx.y;
+    const int bidx = blockIdx.x;
+    const int bidy = blockIdx.y;
+    const int dimy = blockDim.y;
+    
+    int col = bidx *32 + tidx;
+    __shared__ %(vector_type)s v[32];
+    
+    if(tidy == 0)
+    {
+        v[tidx] = vector[bidy*32+tidx]; //vector[bidy*32+tidx];
+    }
+    
+    __syncthreads();
+    
+    int a = tidy;
+    if(col < array_ld)
+    {
+        for(int i = tidy + bidy*32; i < min(N, (bidy+1)*32); i += dimy, a+= dimy)
+        {
+            result[i*result_ld+col] = array[i*array_ld+col] %(operator)s v[a];
+        }
+    }
+}
+
+"""
+
+
+pitch_bsxfun_left_col_template = pycuda_complex_header + """
+__global__ void
+%(name)s(%(array_type)s *array, int array_ld, %(vector_type)s *vector,
+         %(result_type)s *result, int result_ld, int N)
+{
+    // N: number of rows
+    const int tidx = threadIdx.x;
+    const int tidy = threadIdx.y;
+    const int bidx = blockIdx.x;
+    const int bidy = blockIdx.y;
+    const int dimy = blockDim.y;
+    
+    int col = bidx *32 + tidx;
+    __shared__ %(vector_type)s v[32];
+    
+    if(tidy == 0)
+    {
+        v[tidx] = vector[bidy*32+tidx]; //vector[bidy*32+tidx];
+    }
+    
+    __syncthreads();
+    
+    int a = tidy;
+    if(col < array_ld)
+    {
+        for(int i = tidy + bidy*32; i < min(N, (bidy+1)*32); i += dimy, a+= dimy)
+        {
+            result[i*result_ld+col] = v[a] %(operator)s array[i*array_ld+col];
+        }
     }
 }
 

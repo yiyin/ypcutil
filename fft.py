@@ -468,7 +468,7 @@ def ifft(d_A, econ = False, even_size = None,
         
     Returns
     -------
-    out : same type as dd_A
+    out : same type as d_A
         If econ is True, returns real array
         Otherwise, returns complex array.
     """

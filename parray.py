@@ -2295,6 +2295,74 @@ def complex_from_amp_phase(amp, phase):
             phase.gpudata, amp.ld)
     return result
 
+def bsxfun_right(array, vector, operator = '*', inplace = False):
+    if vector.shape[0] > vector.shape[1]:
+        if vector.size != array.shape[0]:
+            raise('vector size' + str(vector.size) + 'does not match \
+                   array dimension' + str(array.shape[0]))
+        direction = 'col'
+    else:
+        if vector.size != array.shape[1]:
+            raise('vector size' + str(vector.size) + 'does not match \
+                   array dimension' + str(array.shape[1]))
+        direction = 'row'
+
+
+    dtype = _get_common_dtype(array, vector)
+    if inplace:
+        if array.dtype != dtype:
+            raise('bsxfun cannot be performed in place')
+        else:
+            result = array
+    else:
+        result = empty(array.shape, dtype = dtype)
+
+    if array.M == 1:
+        raise NotImplementedError
+
+    func = pu.get_bsxfun_function(array.dtype, vector.dtype, result.dtype,
+                                  operator, direction, 'right')
+    func.prepared_call( ((array.M-1)/32+1, (array.N-1)/32+1),
+                         (32, 8, 1), array.gpudata, array.ld,
+                         vector.gpudata, result.gpudata, result.ld,
+                         array.shape[0])
+    if not inplace:
+        return result
+
+def bsxfun_left(array, vector, operator = '*', inplace = False):
+    if vector.shape[0] > vector.shape[1]:
+        if vector.size != array.shape[0]:
+            raise('vector size' + str(vector.size) + 'does not match \
+                   array dimension' + str(array.shape[0]))
+        direction = 'col'
+    else:
+        if vector.size != array.shape[1]:
+            raise('vector size' + str(vector.size) + 'does not match \
+                   array dimension' + str(array.shape[1]))
+        direction = 'row'
+
+
+    dtype = _get_common_dtype(array, vector)
+    if inplace:
+        if array.dtype != dtype:
+            raise('bsxfun cannot be performed in place')
+        else:
+            result = array
+    else:
+        result = empty(array.shape, dtype = dtype)
+
+    if array.M == 1:
+        raise NotImplementedError
+
+    func = pu.get_bsxfun_function(array.dtype, vector.dtype, result.dtype,
+                                  operator, direction, 'left')
+    func.prepared_call( ((array.M-1)/32+1, (array.N-1)/32+1),
+                         (32, 8, 1), array.gpudata, array.ld,
+                         vector.gpudata, result.gpudata, result.ld,
+                         array.shape[0])
+    if not inplace:
+        return result
+
 
 
 
