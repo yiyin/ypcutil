@@ -26,6 +26,7 @@ class cublashandle(object):
     def destroy(self):
         if self.handle is not None:
             cublas.cublasDestroy(self.handle)
+            self.handle = None
     
     def __del__(self):
         self.destroy()
