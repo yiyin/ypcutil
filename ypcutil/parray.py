@@ -2325,7 +2325,7 @@ def bsxfun_right(array, vector, operator = '*', inplace = False):
     func.prepared_call( ((array.N-1)/32+1, (array.M-1)/32+1),
                          (32, 8, 1), array.gpudata, array.ld,
                          vector.gpudata, result.gpudata, result.ld,
-                         array.shape[0], array.shape[1])
+                         array.M, array.N)
     if not inplace:
         return result
 
@@ -2359,7 +2359,7 @@ def bsxfun_left(array, vector, operator = '*', inplace = False):
     func.prepared_call( ((array.N-1)/32+1, (array.M-1)/32+1),
                          (32, 8, 1), array.gpudata, array.ld,
                          vector.gpudata, result.gpudata, result.ld,
-                         array.shape[0], array.shape[1])
+                         array.M, array.N)
     if not inplace:
         return result
 

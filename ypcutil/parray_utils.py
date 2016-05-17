@@ -1557,6 +1557,7 @@ __global__ void
     
     int col = bidx *32 + tidx;
     __shared__ %(vector_type)s v[32];
+    __syncthreads();
     
     if(tidy == 0)
     {
@@ -1594,7 +1595,8 @@ __global__ void
     
     int col = bidx *32 + tidx;
     __shared__ %(vector_type)s v[32];
-    
+    __syncthreads();
+
     if(tidy == 0)
     {
         if(col < N)
@@ -1630,6 +1632,7 @@ __global__ void
     
     int col = bidy *32 + tidx; // actually row
     __shared__ %(vector_type)s v[32];
+    __syncthreads();
     
     if(tidy == 0)
     {
@@ -1669,7 +1672,8 @@ __global__ void
     
     int col = bidy *32 + tidx; // actually row
     __shared__ %(vector_type)s v[32];
-    
+    __syncthreads();
+
     if(tidy == 0)
     {
         if(col < M)
