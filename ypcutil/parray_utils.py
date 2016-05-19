@@ -764,6 +764,145 @@ def get_bsxfun_function(array_type, vector_type, result_type,
 
     return func
 
+@context_dependent_memoize
+def get_maxarray_function(left_dtype, right_dtype,
+                          rslt_dtype, pitch = True):
+    type_left = dtype_to_ctype(left_dtype)
+    type_right = dtype_to_ctype(right_dtype)
+    type_rslt = dtype_to_ctype(rslt_dtype)
+
+    name = "maxarray"
+    operation = "fmax"
+    
+    if pitch:
+        func = SourceModule(
+                pitch_array_func_template % {
+                    "name": name,
+                    "dest_type": type_rslt,
+                    "left_type": type_left,
+                    "right_type": type_right,
+                    "operation": operation,
+                    "fletter": 'f' if left_dtype == np.float32 else '',
+                },
+                options=["--ptxas-options=-v"]).get_function(name)
+        func.prepare('iiPiPiPi')#[np.int32, np.int32, np.intp, np.int32,
+        #              np.intp, np.int32, np.intp, np.int32])
+    else:
+        func = SourceModule(
+                non_pitch_array_func_template % {
+                    "name": name,
+                    "dest_type": type_rslt,
+                    "left_type": type_left,
+                    "right_type": type_right,
+                    "operation": operation,
+                    "fletter": 'f' if left_dtype == np.float32 else ''
+                },
+                options=["--ptxas-options=-v"]).get_function(name)
+        func.prepare('PPPi')#[np.intp, np.intp, np.intp, np.int32])
+    return func
+
+
+@context_dependent_memoize
+def get_maxscalar_function(src_type, dest_type, pitch = True):
+    type_src = dtype_to_ctype(src_type)
+    type_dest = dtype_to_ctype(dest_type)
+    name = "maxscalar"
+    operation = "fmax"
+    
+    if pitch:
+        func = SourceModule(
+                pitch_left_scalar_func_template % {
+                    "name": name,
+                    "src_type": type_src,
+                    "dest_type": type_dest,
+                    "operation": operation,
+                    "fletter": 'f' if src_type == np.float32 else '',
+                },
+                options=["--ptxas-options=-v"]).get_function(name)
+        func.prepare('iiPiPi'+np.dtype(dest_type).char)#[np.int32, np.int32, np.intp, np.int32,
+        #              np.intp, np.int32, _get_type(dest_type)])
+    else:
+        func = SourceModule(
+                non_pitch_left_scalar_func_template % {
+                    "name": name,
+                    "src_type": type_src,
+                    "dest_type": type_dest,
+                    "operation": operation,
+                    "fletter": 'f' if src_type == np.float32 else '',
+                },
+                options=["--ptxas-options=-v"]).get_function(name)
+        func.prepare('PP'+np.dtype(dest_type).char+'i')#[np.intp, np.intp, _get_type(dest_type), np.int32])
+    return func
+
+@context_dependent_memoize
+def get_minarray_function(left_dtype, right_dtype,
+                          rslt_dtype, pitch = True):
+    type_left = dtype_to_ctype(left_dtype)
+    type_right = dtype_to_ctype(right_dtype)
+    type_rslt = dtype_to_ctype(rslt_dtype)
+
+    name = "minarray"
+    operation = "fmin"
+    
+    if pitch:
+        func = SourceModule(
+                pitch_array_func_template % {
+                    "name": name,
+                    "dest_type": type_rslt,
+                    "left_type": type_left,
+                    "right_type": type_right,
+                    "operation": operation,
+                    "fletter": 'f' if left_dtype == np.float32 else '',
+                },
+                options=["--ptxas-options=-v"]).get_function(name)
+        func.prepare('iiPiPiPi')#[np.int32, np.int32, np.intp, np.int32,
+        #              np.intp, np.int32, np.intp, np.int32])
+    else:
+        func = SourceModule(
+                non_pitch_array_func_template % {
+                    "name": name,
+                    "dest_type": type_rslt,
+                    "left_type": type_left,
+                    "right_type": type_right,
+                    "operation": operation,
+                    "fletter": 'f' if left_dtype == np.float32 else ''
+                },
+                options=["--ptxas-options=-v"]).get_function(name)
+        func.prepare('PPPi')#[np.intp, np.intp, np.intp, np.int32])
+    return func
+
+
+@context_dependent_memoize
+def get_minscalar_function(src_type, dest_type, pitch = True):
+    type_src = dtype_to_ctype(src_type)
+    type_dest = dtype_to_ctype(dest_type)
+    name = "minscalar"
+    operation = "fmin"
+    
+    if pitch:
+        func = SourceModule(
+                pitch_left_scalar_func_template % {
+                    "name": name,
+                    "src_type": type_src,
+                    "dest_type": type_dest,
+                    "operation": operation,
+                    "fletter": 'f' if src_type == np.float32 else '',
+                },
+                options=["--ptxas-options=-v"]).get_function(name)
+        func.prepare('iiPiPi'+np.dtype(dest_type).char)#[np.int32, np.int32, np.intp, np.int32,
+        #              np.intp, np.int32, _get_type(dest_type)])
+    else:
+        func = SourceModule(
+                non_pitch_left_scalar_func_template % {
+                    "name": name,
+                    "src_type": type_src,
+                    "dest_type": type_dest,
+                    "operation": operation,
+                    "fletter": 'f' if src_type == np.float32 else '',
+                },
+                options=["--ptxas-options=-v"]).get_function(name)
+        func.prepare('PP'+np.dtype(dest_type).char+'i')#[np.intp, np.intp, _get_type(dest_type), np.int32])
+    return func
 
 """templates"""
             

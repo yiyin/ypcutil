@@ -1970,6 +1970,90 @@ class PitchArray(object):
                                   gpudata = int(int(self.gpudata) +
                                         start*self.dtype.itemsize*self.ld),
                                   base = self)
+
+    def max(self, other):
+        if isinstance(other, PitchArray):
+            if self.shape != other.shape:
+                raise ValueError("array dimension misaligned")
+            dtype = _get_inplace_dtype(self, other)
+            if self.size:
+                if self.M == 1:
+                    func = pu.get_maxarray_function(
+                        other.dtype, self.dtype, self.dtype, pitch = False)
+                    func.prepared_call(
+                        self._grid, self._block, self.gpudata,
+                        other.gpudata, self.gpudata, self.size)
+                else:
+                    func = pu.get_maxarray_function(
+                        other.dtype, self.dtype, self.dtype, pitch = True)
+                    func.prepared_call(
+                        self._grid, self._block, self.M, self.N,
+                        self.gpudata, self.ld, other.gpudata,
+                        other.ld, self.gpudata, self.ld)
+            return self
+        elif issubclass(type(other), (float, int, complex, np.integer,
+                                      np.floating, np.complexfloating)):
+            dtype = _get_inplace_dtype_with_scalar(other, self)
+            if self.size:
+                if self.M == 1:
+                    func = pu.get_maxscalar_function(
+                        self.dtype, self.dtype, pitch = False)
+                    func.prepared_call(
+                        self._grid, self._block, self.gpudata,
+                        self.gpudata, other, self.size)
+                else:
+                    func = pu.get_maxscalar_function(
+                        self.dtype, self.dtype, pitch = True)
+                    func.prepared_call(
+                        self._grid, self._block, self.M, self.N,
+                        self.gpudata, self.ld, self.gpudata,
+                        self.ld, other)
+            return self
+        else:
+            raise TypeError("type of object to max from"
+                            "is not supported")
+
+    def min(self, other):
+        if isinstance(other, PitchArray):
+            if self.shape != other.shape:
+                raise ValueError("array dimension misaligned")
+            dtype = _get_inplace_dtype(self, other)
+            if self.size:
+                if self.M == 1:
+                    func = pu.get_minarray_function(
+                        other.dtype, self.dtype, self.dtype, pitch = False)
+                    func.prepared_call(
+                        self._grid, self._block, self.gpudata,
+                        other.gpudata, self.gpudata, self.size)
+                else:
+                    func = pu.get_minarray_function(
+                        other.dtype, self.dtype, self.dtype, pitch = True)
+                    func.prepared_call(
+                        self._grid, self._block, self.M, self.N,
+                        self.gpudata, self.ld, other.gpudata,
+                        other.ld, self.gpudata, self.ld)
+            return self
+        elif issubclass(type(other), (float, int, complex, np.integer,
+                                      np.floating, np.complexfloating)):
+            dtype = _get_inplace_dtype_with_scalar(other, self)
+            if self.size:
+                if self.M == 1:
+                    func = pu.get_minscalar_function(
+                        self.dtype, self.dtype, pitch = False)
+                    func.prepared_call(
+                        self._grid, self._block, self.gpudata,
+                        self.gpudata, other, self.size)
+                else:
+                    func = pu.get_minscalar_function(
+                        self.dtype, self.dtype, pitch = True)
+                    func.prepared_call(
+                        self._grid, self._block, self.M, self.N,
+                        self.gpudata, self.ld, self.gpudata,
+                        self.ld, other)
+            return self
+        else:
+            raise TypeError("type of object to compare from"
+                            "is not supported")
         
 
 def to_gpu(ary):
