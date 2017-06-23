@@ -772,7 +772,10 @@ def get_maxarray_function(left_dtype, right_dtype,
     type_rslt = dtype_to_ctype(rslt_dtype)
 
     name = "maxarray"
-    operation = "fmax"
+    if left_dtype == np.int32 or right_dtype == np.int32:
+        operation = "max"
+    else:
+        operation = "fmax"
     
     if pitch:
         func = SourceModule(
@@ -807,7 +810,10 @@ def get_maxscalar_function(src_type, dest_type, pitch = True):
     type_src = dtype_to_ctype(src_type)
     type_dest = dtype_to_ctype(dest_type)
     name = "maxscalar"
-    operation = "fmax"
+    if src_type == np.int32:
+        operation = "max"
+    else:
+        operation = "fmax"
     
     if pitch:
         func = SourceModule(
@@ -842,7 +848,10 @@ def get_minarray_function(left_dtype, right_dtype,
     type_rslt = dtype_to_ctype(rslt_dtype)
 
     name = "minarray"
-    operation = "fmin"
+    if left_dtype == np.int32 or right_dtype == np.int32:
+        operation = "min"
+    else:
+        operation = "fmin"
     
     if pitch:
         func = SourceModule(
@@ -877,7 +886,10 @@ def get_minscalar_function(src_type, dest_type, pitch = True):
     type_src = dtype_to_ctype(src_type)
     type_dest = dtype_to_ctype(dest_type)
     name = "minscalar"
-    operation = "fmin"
+    if src_type == np.int32:
+        operation = "min"
+    else:
+        operation = "fmin"
     
     if pitch:
         func = SourceModule(
@@ -903,6 +915,40 @@ def get_minscalar_function(src_type, dest_type, pitch = True):
                 options=["--ptxas-options=-v"]).get_function(name)
         func.prepare('PP'+np.dtype(dest_type).char+'i')#[np.intp, np.intp, _get_type(dest_type), np.int32])
     return func
+
+
+@context_dependent_memoize
+def get_array_operator_function(src_type, dest_type, operator_name, pitch = True):
+    type_src = dtype_to_ctype(src_type)
+    type_dest = dtype_to_ctype(dest_type)
+    name = "array_"+operator_name
+    if src_type in [np.complex128, np.complex64]:
+        operation = "pycuda::"+operator_name
+    else:
+        operation = operaotr_name
+
+    if pitch:
+        func = SourceModule(
+                pitch_template % {
+                    "name": name,
+                    "dest_type": type_dest,
+                    "src_type": type_src,
+                    "operation": operation,
+                },
+                options=["--ptxas-options=-v"]).get_function(name)
+        func.prepare('iiPiPi')
+    else:
+        func = SourceModule(
+                non_pitch_template % {
+                    "name": name,
+                    "dest_type": type_dest,
+                    "src_type": type_src,
+                    "operation": operation,
+                },
+                options=["--ptxas-options=-v"]).get_function(name)
+        func.prepare('PPi')
+    return func
+
 
 """templates"""
             

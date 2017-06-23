@@ -2447,6 +2447,25 @@ def bsxfun_left(array, vector, operator = '*', inplace = False):
     if not inplace:
         return result
 
+def array_operator(array, operator_name, inplace = False):
+    if inplace:
+        result = array
+    else:
+        result = empty_like(array)
+    if array.M == 1:
+        func = pu.get_array_operator_function(array.dtype, result.dtype,
+                                              operator_name, pitch = False)
+        func.prepared_call(
+            array._grid, array._block, result.gpudata,
+            array.gpudata, array.size)
+    else:
+        func = pu.get_array_operator_function(
+                    array.dtype, result.dtype, operator_name, pitch = True)
+        func.prepared_call(
+            array._grid, array._block, array.M, array.N,
+            result.gpudata, result.ld, array.gpudata, array.ld)
+    return result
 
-
+def exp(array, inplace = False):
+    return array_operator(array, 'exp', inplace = inplace)
 
