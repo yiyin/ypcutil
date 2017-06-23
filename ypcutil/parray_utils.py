@@ -1741,7 +1741,7 @@ __global__ void
     const int dimy = blockDim.y;
     
     int col = bidx *32 + tidx;
-    __shared__ %(vector_type)s v[32];
+    extern __shared__ %(vector_type)s v[];
     __syncthreads();
     
     if(tidy == 0)
@@ -1779,7 +1779,7 @@ __global__ void
     const int dimy = blockDim.y;
     
     int col = bidx *32 + tidx;
-    __shared__ %(vector_type)s v[32];
+    extern __shared__ %(vector_type)s v[];
     __syncthreads();
 
     if(tidy == 0)
@@ -1816,7 +1816,7 @@ __global__ void
     const int dimy = blockDim.y;
     
     int col = bidy *32 + tidx; // actually row
-    __shared__ %(vector_type)s v[32];
+    extern __shared__ %(vector_type)s v[];
     __syncthreads();
     
     if(tidy == 0)
@@ -1856,7 +1856,7 @@ __global__ void
     const int dimy = blockDim.y;
     
     int col = bidy *32 + tidx; // actually row
-    __shared__ %(vector_type)s v[32];
+    extern __shared__ %(vector_type)s v[];
     __syncthreads();
 
     if(tidy == 0)

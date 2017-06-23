@@ -2409,7 +2409,8 @@ def bsxfun_right(array, vector, operator = '*', inplace = False):
     func.prepared_call( ((array.N-1)/32+1, (array.M-1)/32+1),
                          (32, 8, 1), array.gpudata, array.ld,
                          vector.gpudata, result.gpudata, result.ld,
-                         array.M, array.N)
+                         array.M, array.N,
+                         shared_size = 32*vector.dtype.itemsize)
     if not inplace:
         return result
 
@@ -2443,7 +2444,8 @@ def bsxfun_left(array, vector, operator = '*', inplace = False):
     func.prepared_call( ((array.N-1)/32+1, (array.M-1)/32+1),
                          (32, 8, 1), array.gpudata, array.ld,
                          vector.gpudata, result.gpudata, result.ld,
-                         array.M, array.N)
+                         array.M, array.N,
+                         shared_size = 32*vector.dtype.itemsize)
     if not inplace:
         return result
 
