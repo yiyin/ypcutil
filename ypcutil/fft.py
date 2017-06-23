@@ -245,7 +245,7 @@ class function_holder(object):
 _kernels = function_holder()
 
 
-def fft(d_A, econ = False):
+def fft(d_A, econ = False, batch_size = 128):
     """
     Perform 1D fft on each row of d_A
     can accept only 2D array
@@ -270,13 +270,13 @@ def fft(d_A, econ = False):
             slightly worse than using PitchArray.
     """
     if type(d_A) is parray.PitchArray:
-        return _fft_parray(d_A, econ)
+        return _fft_parray(d_A, econ = econ, batch_size = batch_size)
     elif type(d_A) is gpuarray.GPUArray:
-        return _fft_gpuarray(d_A, econ)
+        return _fft_gpuarray(d_A, econ = econ, batch_size = batch_size)
     else:
         raise TypeError("FFT: Only PitchArray and GPUArray are supported")
 
-def _fft_gpuarray(d_A, econ = False):
+def _fft_gpuarray(d_A, econ = False, batch_size = 128):
     """
     Perform 1D fft on each row of d_A
     can accept only 2D array
@@ -329,7 +329,7 @@ def _fft_gpuarray(d_A, econ = False):
         (total_inputs, size/2+1 if econ and realA else size),
         outdtype)
     
-    batch_size = min(total_inputs, 128)
+    batch_size = min(total_inputs, batch_size)
     plan = fftplan(size, A.dtype, size, d_output.shape[1],
                    forward = True, econ = realA,
                    batch_size = batch_size)
@@ -365,7 +365,7 @@ def _fft_gpuarray(d_A, econ = False):
 
 
 
-def _fft_parray(d_A, econ = False):
+def _fft_parray(d_A, econ = False, batch_size = 128):
     """
     Perform 1D fft on each row of d_A
     can accept only 2D array
@@ -410,7 +410,7 @@ def _fft_parray(d_A, econ = False):
         (total_inputs, size/2+1 if econ and realA else size),
         outdtype)
     
-    batch_size = min(total_inputs, 128)
+    batch_size = min(total_inputs, batch_size)
     plan = fftplan(size, A.dtype, A.ld, d_output.ld,
                    forward = True, econ = realA,
                    batch_size = batch_size)
@@ -440,7 +440,7 @@ def _fft_parray(d_A, econ = False):
 
 
 def ifft(d_A, econ = False, even_size = None,
-         scale = True, scalevalue = None):
+         scale = True, scalevalue = None, batch_size = 128):
     """
     Perform 1D inverse fft on each row of d_A
     can accept only 2D array, may be vector
@@ -474,16 +474,18 @@ def ifft(d_A, econ = False, even_size = None,
     """
     if type(d_A) is parray.PitchArray:
         return _ifft_parray(d_A, econ = econ, even_size = even_size,
-                            scale = scale, scalevalue = scalevalue)
+                            scale = scale, scalevalue = scalevalue,
+                            batch_size = batch_size)
     elif type(d_A) is gpuarray.GPUArray:
         return _ifft_gpuarray(d_A, econ = econ, even_size = even_size,
-                              scale = scale, scalevalue = scalevalue)
+                              scale = scale, scalevalue = scalevalue,
+                              batch_size = batch_size)
     else:
         raise TypeError("FFT: Only PitchArray and GPUArray are supported")
 
 
 def _ifft_parray(d_A, econ = False, even_size = None,
-         scale = True, scalevalue = None):
+         scale = True, scalevalue = None, batch_size = 128):
     """
     Perform 1D inverse fft on each row of d_A
     can accept only 2D array, may be vector
@@ -541,7 +543,7 @@ def _ifft_parray(d_A, econ = False, even_size = None,
     outdtype = parray.complextofloat(A.dtype) if econ else A.dtype        
     d_output = parray.empty((total_inputs, size), outdtype)
     
-    batch_size = min(total_inputs, 128)
+    batch_size = min(total_inputs, batch_size)
     # Even for vectors d_output is alway of shape (1, size),
     # so d_output.ld should be correct
     plan = fftplan(size, A.dtype, A.ld, d_output.ld,
@@ -565,7 +567,7 @@ def _ifft_parray(d_A, econ = False, even_size = None,
 
 
 def _ifft_gpuarray(d_A, econ = False, even_size = None,
-         scale = True, scalevalue = None):
+         scale = True, scalevalue = None, batch_size = 128):
     """
     Perform 1D inverse fft on each row of d_A
     can accept only 2D array, may be vector
@@ -632,7 +634,7 @@ def _ifft_gpuarray(d_A, econ = False, even_size = None,
     outdtype = parray.complextofloat(A.dtype) if econ else A.dtype        
     d_output = gpuarray.empty((total_inputs, size), outdtype)
     
-    batch_size = min(total_inputs, 128)
+    batch_size = min(total_inputs, batch_size)
     # Even for vectors d_output is alway of shape (1, size),
     # so d_output.ld should be correct
     plan = fftplan(size, A.dtype, A.shape[1], d_output.shape[1],
@@ -659,7 +661,7 @@ def _ifft_gpuarray(d_A, econ = False, even_size = None,
         return d_output.reshape((d_output.size,1)) if reshaped else d_output
 
 
-def fft2(d_A, econ = False):
+def fft2(d_A, econ = False, batch_size = 8):
     """
     Perform 2D fft on the last two axis of d_A
     can accept only 2D or 3D array
@@ -679,14 +681,14 @@ def fft2(d_A, econ = False):
         Containing the fft of corresponding to the inputs.
     """
     if type(d_A) is parray.PitchArray:
-        return _fft2_parray(d_A, econ)
+        return _fft2_parray(d_A, econ = econ, batch_size = batch_size)
     elif type(d_A) is gpuarray.GPUArray:
-        return _fft2_gpuarray(d_A, econ)
+        return _fft2_gpuarray(d_A, econ = econ, batch_size = batch_size)
     else:
         raise TypeError("FFT2: Only PitchArray and GPUArray are supported")
 
 
-def _fft2_parray(d_A, econ = False):
+def _fft2_parray(d_A, econ = False, batch_size = 8):
     """
     Perform 2D fft on the last two axis of d_A
     can accept only 2D or 3D array
@@ -728,7 +730,7 @@ def _fft2_parray(d_A, econ = False):
     if econ and realA:
         outshape[-1] = outshape[-1]/2+1
     d_output = parray.empty(outshape, outdtype)
-    batch_size = min(total_inputs, 8)
+    batch_size = min(total_inputs, batch_size)
     
     plan = fftplan(
         size, d_A.dtype, d_A.ld, d_output.ld, forward = True, econ = realA,
@@ -765,7 +767,7 @@ def _fft2_parray(d_A, econ = False):
     return d_output
         
 
-def _fft2_gpuarray(d_A, econ = False):
+def _fft2_gpuarray(d_A, econ = False, batch_size = 8):
     """
     Perform 2D fft on the last two axis of d_A
     can accept only 2D or 3D array
@@ -805,7 +807,7 @@ def _fft2_gpuarray(d_A, econ = False):
     if econ and realA:
         outshape[-1] = outshape[-1]/2+1
     d_output = gpuarray.empty(outshape, outdtype)
-    batch_size = min(total_inputs, 8)
+    batch_size = min(total_inputs, batch_size)
     input_total_elements = size[0]*size[1]
     output_total_elements = outshape[-1]*outshape[-2]
     
@@ -846,7 +848,7 @@ def _fft2_gpuarray(d_A, econ = False):
 
 
 def ifft2(d_A, econ = False, even_size = None,
-         scale = True, scalevalue = None):
+         scale = True, scalevalue = None, batch_size = 8):
     """
     Perform 2D inverse fft on the last two axes of d_A
     can accept only 2D or 3D array
@@ -881,16 +883,18 @@ def ifft2(d_A, econ = False, even_size = None,
     """
     if type(d_A) is parray.PitchArray:
         return _ifft2_parray(d_A, econ = econ, even_size = even_size,
-                             scale = scale, scalevalue = scalevalue)
+                             scale = scale, scalevalue = scalevalue,
+                             batch_size = batch_size)
     elif type(d_A) is gpuarray.GPUArray:
         return _ifft2_gpuarray(d_A, econ = econ, even_size = even_size,
-                               scale = scale, scalevalue = scalevalue)
+                               scale = scale, scalevalue = scalevalue,
+                               batch_size = batch_size)
     else:
         raise TypeError("IFFT2: Only PitchArray and GPUArray are supported")
 
 
 def _ifft2_parray(d_A, econ = False, even_size = None,
-          scale = True, scalevalue = None):
+          scale = True, scalevalue = None, batch_size = 8):
     """
     Perform 2D inverse fft on the last two axes of d_A
     can accept only 2D or 3D array
@@ -948,7 +952,7 @@ def _ifft2_parray(d_A, econ = False, even_size = None,
     d_output = (parray.empty((total_inputs, size[0], size[1]), outdtype) if
                     ndim == 3 else parray.empty(size, outdtype))
     
-    batch_size = min(total_inputs, 8)
+    batch_size = min(total_inputs, batch_size)
     plan = fftplan(size, d_A.dtype, d_A.ld, d_output.ld,
                    forward = False, econ = econ,
                    batch_size = batch_size,
@@ -978,7 +982,7 @@ def _ifft2_parray(d_A, econ = False, even_size = None,
 
 
 def _ifft2_gpuarray(d_A, econ = False, even_size = None,
-          scale = True, scalevalue = None):
+          scale = True, scalevalue = None, batch_size = 8):
     """
     Perform 2D inverse fft on the last two axes of d_A
     can accept only 2D or 3D array
@@ -1038,7 +1042,7 @@ def _ifft2_gpuarray(d_A, econ = False, even_size = None,
     
     input_total_elements = size[0]*(size[1]/2+1 if econ else size[1])
     output_total_elements = size[0]*size[1]
-    batch_size = min(total_inputs, 8)
+    batch_size = min(total_inputs, batch_size)
     plan = fftplan(size, d_A.dtype, input_total_elements,
                    output_total_elements, forward = False,
                    econ = econ, batch_size = batch_size)
@@ -1064,19 +1068,19 @@ def _ifft2_gpuarray(d_A, econ = False, even_size = None,
     return d_output
 
 
-def fft3(d_A, econ = False, shape = None):
+def fft3(d_A, econ = False, shape = None, batch_size = 4):
     if type(d_A) is parray.PitchArray:
         if shape is None:
             raise LogicError("FFT3: shape must be specified "
                              "when input is PitchArray")
-        return _fft3_parray(d_A, shape, econ)
+        return _fft3_parray(d_A, shape, econ = econ, batch_size = batch_size)
     elif type(d_A) is gpuarray.GPUArray:
-        return _fft3_gpuarray(d_A, econ)
+        return _fft3_gpuarray(d_A, econ = econ, batch_size = batch_size)
     else:
         raise TypeError("FFT3: Only PitchArray and GPUArray are supported")
 
 
-def _fft3_parray(d_A, shape, econ = False):
+def _fft3_parray(d_A, shape, econ = False, batch_size = 4):
     """
     Perform 3D fft on the last three axis of d_A
     can accept only 2D array, where axis 0 is indicate the
@@ -1116,7 +1120,7 @@ def _fft3_parray(d_A, shape, econ = False):
         outsize[-1] = outsize[-1]/2+1
     output_total_elements = outsize[0]*outsize[1]*outsize[2]
     d_output = parray.empty((total_inputs, output_total_elements), outdtype)
-    batch_size = min(total_inputs, 4)
+    batch_size = min(total_inputs, batch_size)
     
     plan = fftplan(
         size, d_A.dtype, d_A.ld, d_output.ld, forward = True, econ = realA,
@@ -1150,7 +1154,7 @@ def _fft3_parray(d_A, shape, econ = False):
     return d_output
 
 
-def _fft3_gpuarray(d_A, econ = False):
+def _fft3_gpuarray(d_A, econ = False, batch_size = 4):
     """
     Perform 3D fft on the last three axis of d_A
     can accept only 2D array
@@ -1190,7 +1194,7 @@ def _fft3_gpuarray(d_A, econ = False):
     if econ and realA:
         outshape[-1] = outshape[-1]/2+1
     d_output = gpuarray.empty(outshape, outdtype)
-    batch_size = min(total_inputs, 4)
+    batch_size = min(total_inputs, batch_size)
     input_total_elements = size[0]*size[1]*size[2]
     output_total_elements = outshape[-1]*outshape[-2]*outshape[-3]
     plan = fftplan(
@@ -1241,22 +1245,25 @@ def _fft3_gpuarray(d_A, econ = False):
 
 
 def ifft3(d_A, econ = False, even_size = None,
-         scale = True, scalevalue = None, shape = None):
+         scale = True, scalevalue = None, shape = None,
+         batch_size = 4):
     if type(d_A) is parray.PitchArray:
         if shape is None:
             raise LogicError("IFFT3: shape must be specified "
                              "when input is PitchArray")
         return _ifft3_parray(d_A, shape, econ = econ, even_size = even_size,
-                             scale = scale, scalevalue = scalevalue)
+                             scale = scale, scalevalue = scalevalue,
+                             batch_size = batch_size)
     elif type(d_A) is gpuarray.GPUArray:
         return _ifft3_gpuarray(d_A, econ = econ, even_size = even_size,
-                               scale = scale, scalevalue = scalevalue)
+                               scale = scale, scalevalue = scalevalue,
+                               batch_size = batch_size)
     else:
         raise TypeError("FFT3: Only PitchArray and GPUArray are supported")
 
 
 def _ifft3_parray(d_A, shape, econ = False, even_size = None,
-          scale = True, scalevalue = None):
+          scale = True, scalevalue = None, batch_size = 4):
     """
     Perform 3D inverse fft on the last two axes of d_A
     can accept only 2D array, where axis 0 is indicate the
@@ -1302,7 +1309,7 @@ def _ifft3_parray(d_A, shape, econ = False, even_size = None,
     d_output = (
         parray.empty((total_inputs, size[0]*size[1]*size[2]), outdtype))
     
-    batch_size = min(total_inputs, 4)
+    batch_size = min(total_inputs, batch_size)
     plan = fftplan(size, d_A.dtype, d_A.ld, d_output.ld,
                    forward = False, econ = econ,
                    batch_size = batch_size)
@@ -1330,7 +1337,7 @@ def _ifft3_parray(d_A, shape, econ = False, even_size = None,
 
 
 def _ifft3_gpuarray(d_A, econ = False, even_size = None,
-          scale = True, scalevalue = None):
+          scale = True, scalevalue = None, batch_size = 4):
     """
     Perform 3D inverse fft on the last two axes of d_A
     can accept only 2D or 3D array
@@ -1393,7 +1400,7 @@ def _ifft3_gpuarray(d_A, econ = False, even_size = None,
     input_total_elements = size[0]*size[1]*(size[2]/2+1 if econ else size[2])
     output_total_elements = size[0]*size[1]*size[2]
     
-    batch_size = min(total_inputs, 4)
+    batch_size = min(total_inputs, batch_size)
     plan = fftplan(size, d_A.dtype, input_total_elements,
                    output_total_elements,
                    forward = False, econ = econ,
