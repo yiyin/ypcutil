@@ -2411,8 +2411,7 @@ def bsxfun_right(array, vector, operator = '*', inplace = False):
                          vector.gpudata, result.gpudata, result.ld,
                          array.M, array.N,
                          shared_size = 32*vector.dtype.itemsize)
-    if not inplace:
-        return result
+    return result
 
 def bsxfun_left(array, vector, operator = '*', inplace = False):
     if vector.shape[0] > vector.shape[1]:
@@ -2446,8 +2445,7 @@ def bsxfun_left(array, vector, operator = '*', inplace = False):
                          vector.gpudata, result.gpudata, result.ld,
                          array.M, array.N,
                          shared_size = 32*vector.dtype.itemsize)
-    if not inplace:
-        return result
+    return result
 
 def array_operator(array, operator_name, inplace = False):
     if inplace:

@@ -1,4 +1,8 @@
+#!/usr/bin/env python
+
+import pycuda.driver as cuda
 from pycuda.compiler import SourceModule
+from pycuda.tools import dtype_to_ctype, context_dependent_memoize
 import pycuda.gpuarray as garray
 import numpy as np
 
@@ -8,7 +12,7 @@ def curand_setup(num_threads, seed):
     """
     Setup curand seed
     """
-    func = get_curand_int_func()
+    func = get_curand_init_func()
     grid = ( (int(num_threads)-1)/128 + 1,1)
     block = (128,1,1)
     
@@ -18,8 +22,8 @@ def curand_setup(num_threads, seed):
     func.prepared_call( grid, block, state.gpudata, num_threads, seed)
     return state
 
-
-def get_curand_int_func():
+@context_dependent_memoize
+def get_curand_init_func():
     code = """
 #include "curand_kernel.h"
 extern "C" {
@@ -41,4 +45,5 @@ rand_setup(curandStateXORWOW_t* state, int size, unsigned long long seed)
     func.prepare('PiL')#[np.intp, np.int32, np.uint64])
     return func
     
-    
+def reset_stack_limit():
+    cuda.Context.set_limit(cuda.limit.STACK_SIZE,1024)
