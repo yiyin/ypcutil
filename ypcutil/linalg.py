@@ -6,8 +6,9 @@ import pycuda.gpuarray as garray
 from pycuda.tools import dtype_to_ctype, context_dependent_memoize
 from pycuda.compiler import SourceModule
 
-import scikits.cuda.cublas as cublas
-import scikits.cuda.cula as cula
+import skcuda.cublas as cublas
+import skcuda.cula as cula
+import skcuda.cusolver as cusolver
 import parray
 import simpleio as si
 
@@ -18,16 +19,16 @@ class cublashandle(object):
     def __init__(self):
         self.handle = None
         self.create()
-        
+
     def create(self):
         if self.handle is None:
             self.handle = cublas.cublasCreate()
-        
+
     def destroy(self):
         if self.handle is not None:
             cublas.cublasDestroy(self.handle)
             self.handle = None
-    
+
     def __del__(self):
         self.destroy()
 
@@ -40,7 +41,7 @@ def dot(A, B, opa = 'n', opb = 'n',
     if C is specified, use the memory in C.
     Specified C must have the same leading dimension as that of the result and
     the other dimension must be bigger or equal to that of the result.
-    
+
     Parameters:
     -----------
     A: parray.PitchArray
@@ -65,15 +66,15 @@ def dot(A, B, opa = 'n', opb = 'n',
     Cscale: float
             scaling factor for C
             result will be C = C*Cscale + scale*A*B
-    
+
     Note:
     -----
     works only for CUDA VERSION > 4.0 where handle is introduced.
-    
+
     Will NOT work for complex case when A and B shares overlapping
     memory, but should work if A==B.
     """
-    
+
     if A.dtype != B.dtype:
         raise TypeError("matrix multiplication must have same dtype")
 
@@ -105,10 +106,10 @@ def dot(A, B, opa = 'n', opb = 'n',
 
         if opa in ['c', 'C']:
             opa = 't'
-        
+
     scale = dtype.type(scale)
     Cscale = dtype.type(Cscale)
-    
+
     if dtype == np.float64:
         tp = 'cublas.cublasD'
         complex_type = False
@@ -134,7 +135,7 @@ def dot(A, B, opa = 'n', opb = 'n',
         if C.shape[1] != l:
             raise AttributeError("shape of the provided result array "
                                  + C.shape.__str__()
-                                 + " does not match intended result " 
+                                 + " does not match intended result "
                                  + (m,l).__str__())
         if C.shape[0] < m + Cstart:
             raise AttributeError("shape of the provided result array "
@@ -144,13 +145,13 @@ def dot(A, B, opa = 'n', opb = 'n',
         if C.dtype != dtype:
             raise TypeError("Result array C provided must have "
                             "the same dtype as inputs")
-    
+
     conjA = False
     conjB = False
     conjC = False
-    
+
     sameflag = (A==B)
-    
+
     itemsize = C.dtype.itemsize
     handlestr = "handle.handle"
     if m == 1:
@@ -241,7 +242,7 @@ def dot(A, B, opa = 'n', opb = 'n',
                         func = (tp + "gerc(handle.handle, l, m, scale, "
                                 + "B.gpudata, 1, A.gpudata, 1, "
                                 + "int(C.gpudata)+Cstart*itemsize*C.ld, C.ld)")
-                    
+
                     else:
                         B.conj()
                         conjB = True
@@ -276,7 +277,7 @@ def dot(A, B, opa = 'n', opb = 'n',
                             opa = 'n'
                         else:
                             opa = 't'
-                        
+
                         func = (tp + "gemv(handle.handle, '" + opa + "', "
                                 + "A.shape[1], A.shape[0], scale, A.gpudata, "
                                 + "A.ld, B.gpudata, 1, Cscale, "
@@ -297,7 +298,7 @@ def dot(A, B, opa = 'n', opb = 'n',
                         if opa in ['t', 'T']:
                             opa = 'n'
                         else:
-                            opa = 't' 
+                            opa = 't'
                         func = (tp + "gemv(handle.handle, '" + opa + "', "
                                 + "A.shape[1],  A.shape[0], scale, A.gpudata, "
                                 + "A.ld, B.gpudata, 1, Cscale, int(C.gpudata) "
@@ -311,7 +312,7 @@ def dot(A, B, opa = 'n', opb = 'n',
     if handle is None:
         handle = cublashandle()
     eval(func)
-    
+
     if conjC:
         C.conj()
 
@@ -326,7 +327,7 @@ def dot(A, B, opa = 'n', opb = 'n',
 def norm(A, handle = None):
     """
     computes the l2 norm of a vector A
-    
+
     Parameters
     ----------
     A : parray.PitchArray
@@ -356,7 +357,7 @@ def svd(G, compute_u = True, compute_v = True, econ = False):
     Parameters
     ----------------------------------------
     G:  PitchArray, GPUArray or numpy.ndarray of shape (m,n)
-        if G is GPUArray or PitchArray, its gpudata will be 
+        if G is GPUArray or PitchArray, its gpudata will be
         destroyed after calling the function
     compute_u: bool
                whether return U matrix or not
@@ -384,7 +385,7 @@ def svd(G, compute_u = True, compute_v = True, econ = False):
     S,V = svd(G, compute_u = False, compute_v = True)
     U,S,V = svd(G, compute_u = True, compute_v = True)
     """
-    
+
     if G.__class__ is not parray.PitchArray:
         if G.__class__ is garray.GPUArray:
             h_G = G.get()
@@ -396,10 +397,10 @@ def svd(G, compute_u = True, compute_v = True, econ = False):
             raise TypeError("G must be either parray, or GPUArray or ndarray")
     else:
         A = G
-    
+
     real_dtype = np.dtype(np.float32)
     if A.dtype == np.complex64:
-        svd_func = cula.culaDeviceCgesvd        
+        svd_func = cula.culaDeviceCgesvd
     elif A.dtype == np.float32:
         svd_func = cula.culaDeviceSgesvd
     else:
@@ -413,13 +414,13 @@ def svd(G, compute_u = True, compute_v = True, econ = False):
             real_dtype = np.dtype(np.float64)
         else:
             raise TypeError('does not support premium double precision svd')
-    
+
     if len(A.shape) != 2:
         raise TypeError("svd only works on 2D matrix")
-    
+
     S = parray.empty(min(A.shape), real_dtype)
     cula.culaInitialize()
-    
+
     if compute_u:
         if compute_v:
             if econ:
@@ -515,14 +516,14 @@ def pinv(G, rcond = 1e-8):
     Parameters
     -----------------------------------
     G:  PitchArray, GPUArray or numpy.ndarray of shape (m,n)
-        if G is GPUArray or PitchArray, 
+        if G is GPUArray or PitchArray,
         its gpudata will be destroyed after calling the function
     rcond:  float
             Cutoff for small singular values.
             Singular values smaller (in modulus) than
             `rcond` * largest_singular_value (again, in modulus)
             are set to zero
-            
+
     Returns
     -----------------------------------
     out: PitchArray
@@ -535,7 +536,7 @@ def pinv(G, rcond = 1e-8):
         (S.size, 1), (256,1,1), S.gpudata, V.gpudata,
         V.ld, V.shape[1], rcond)
     return dot(V, U, opa='c', opb='c')
-    
+
 def pinv_sym(G, rcond = 1e-8):
     """
     Computes the Moore-Penrose pseudo-inversion using SVD method
@@ -544,14 +545,14 @@ def pinv_sym(G, rcond = 1e-8):
     -----------------------------------
     G:  PitchArray, GPUArray or numpy.ndarray of shape (m,m)
         symmetric matrix
-        if G is GPUArray or PitchArray, 
+        if G is GPUArray or PitchArray,
         its gpudata will be destroyed after calling the function
     rcond:  float
             Cutoff for small singular values.
             Singular values smaller (in modulus) than
             `rcond` * largest_singular_value (again, in modulus)
             are set to zero
-            
+
     Returns
     -----------------------------------
     out: PitchArray
@@ -602,10 +603,10 @@ def solve_eq(G, q, rcond = 1e-8):
     result = dot(V, qq, opa='c')
     return result
 
-    
+
 def solve_eq_sym(G, q, rcond = 1e-8, save_singular = None, cut_num = None, disp_rcond=False):
     """
-    solves Gc = q using pseudo-inversion via SVD, 
+    solves Gc = q using pseudo-inversion via SVD,
     with G a self-adjoint matrix
 
     Parameters
@@ -627,10 +628,10 @@ def solve_eq_sym(G, q, rcond = 1e-8, save_singular = None, cut_num = None, disp_
     """
     if rcond is None:
         rcond = 1e-8
-    
+
     if G.dtype != q.dtype:
         raise TypeError("G,q must be of the same dtype")
-    
+
     if G.shape[0] != G.shape[1]:
         raise ValueError("G must be square matrix")
 
@@ -646,11 +647,11 @@ def solve_eq_sym(G, q, rcond = 1e-8, save_singular = None, cut_num = None, disp_
             rcond = 1e-7
         else:
             rcond = (S[cut_num].get()+S[cut_num-1].get())/2/S[0].get()
-    
+
     qq = dot(U, q, opa='c')
     if disp_rcond:
         print "using absolute rcond:", S[0].get()*rcond, "in inversion"
-    
+
     sq_func = _get_sq_kernel(S.dtype, qq.dtype)
     sq_func.prepared_call(
         (6 * cuda.Context.get_device().MULTIPROCESSOR_COUNT, 1),
@@ -660,7 +661,7 @@ def solve_eq_sym(G, q, rcond = 1e-8, save_singular = None, cut_num = None, disp_
 
 def solve_eq_sym_mixed(G, qr, qi, rcond = 1e-8, save_singular = None, cut_num = None):
     """
-    solves Gc = qr+1j*qi using pseudo-inversion via SVD, 
+    solves Gc = qr+1j*qi using pseudo-inversion via SVD,
     with G a real symmetric matrix
 
     Parameters
@@ -684,7 +685,7 @@ def solve_eq_sym_mixed(G, qr, qi, rcond = 1e-8, save_singular = None, cut_num = 
         raise TypeError("G,qr must be of the same dtype")
     if G.dtype != qi.dtype:
         raise TypeError("G,qr must be of the same dtype")
-    
+
     if G.shape[0] != G.shape[1]:
         raise ValueError("G must be square matrix")
 
@@ -700,10 +701,10 @@ def solve_eq_sym_mixed(G, qr, qi, rcond = 1e-8, save_singular = None, cut_num = 
             rcond = 1e-7
         else:
             rcond = (S[cut_num].get()+S[cut_num-1].get())/2/S[0].get()
-    
+
     qqr = dot(U, qr, opa='c')
     print "using absolute rcond:", S[0].get()*rcond, "in inversion"
-    
+
     sq_func = _get_sq_kernel(S.dtype, qqr.dtype)
     sq_func.prepared_call(
         (6 * cuda.Context.get_device().MULTIPROCESSOR_COUNT, 1),
@@ -711,15 +712,66 @@ def solve_eq_sym_mixed(G, qr, qi, rcond = 1e-8, save_singular = None, cut_num = 
     resultr = dot(U, qqr)
 
     qqi = dot(U, qi, opa='c')
-    
+
     sq_func.prepared_call(
         (6 * cuda.Context.get_device().MULTIPROCESSOR_COUNT, 1),
         (256,1,1), S.gpudata, qqi.gpudata, rcond, S.size)
     resulti = dot(U, qqi)
-    
+
     return parray.make_complex(resultr, resulti)
 
-    
+def eig_sym_cusolver(x, max_sweep = 15, sort_eig = 1, tolerance = 1e-7,
+                     get_stats = False):
+    n, m = x.shape
+    w = parray.empty((n,1), dtype = parray.complextofloat(x.dtype))
+
+    handle = cusolver.cusolverDnCreate()
+    params = cusolver.cusolverDnCreateSyevjInfo()
+    cusolver.cusolverDnXsyevjSetTolerance(params, tolerance)
+    cusolver.cusolverDnXsyevjSetMaxSweeps(params, max_sweep)
+    cusolver.cusolverDnXsyevjSetSortEig(params, sort_eig)
+
+    if x.dtype == np.float32:
+        buffer_func = cusolver.cusolverDnSsyevj_bufferSize
+        solver_func = cusolver.cusolverDnSsyevj
+    elif x.dtype == np.double:
+        buffer_func = cusolver.cusolverDnDsyevj_bufferSize
+        solver_func = cusolver.cusolverDnDsyevj
+    elif x.dtype == np.complex64:
+        #raise ValueError("current implementation of eigendecomposition of\
+        #                  Hermitian matrix does not work for single precision")
+        x.conj()
+        buffer_func = cusolver.cusolverDnCheevj_bufferSize
+        solver_func = cusolver.cusolverDnCheevj
+    elif x.dtype == np.complex128:
+        x.conj()
+        buffer_func = cusolver.cusolverDnZheevj_bufferSize
+        solver_func = cusolver.cusolverDnZheevj
+
+    lwork = buffer_func(handle, 'CUSOLVER_EIG_MODE_VECTOR',
+                        'u', n, x.gpudata, x.ld,
+                        w.gpudata, params)
+
+    workspace_gpu = parray.zeros(lwork, dtype = x.dtype)
+    info = parray.zeros(1, dtype = np.int32)
+    # Compute:
+    solver_func(handle, 'CUSOLVER_EIG_MODE_VECTOR',
+                'u', n, x.gpudata, x.ld,
+                w.gpudata, workspace_gpu.gpudata,
+                lwork, info.gpudata, params)
+    # print info
+    if get_stats:
+        sweeps = cusolver.cusolverDnXsyevjGetSweeps(handle, params)
+        residual = cusolver.cusolverDnXsyevjGetResidual(handle, params)
+
+    cusolver.cusolverDnDestroySyevjInfo(params)
+    cusolver.cusolverDnDestroy(handle)
+
+    if get_stats:
+        return w, x.T(), sweeps, residual
+    else:
+        return w, x.T()
+
 def eig_sym(G, compute_z = True, uplo = 'U'):
     """
     compute Eigenvalue Decompositon of a symmetric or Hermitian matrix G
@@ -767,10 +819,10 @@ def eig_sym(G, compute_z = True, uplo = 'U'):
             raise TypeError("G must be either parray, or GPUArray or ndarray")
     else:
         A = G
-    
+
     if len(A.shape) != 2:
         raise TypeError("eig only works on 2D matrix")
-    
+
     if A.shape[0] != A.shape[1]:
         raise ValueError("G must be square matrix")
 
@@ -780,10 +832,10 @@ def eig_sym(G, compute_z = True, uplo = 'U'):
         uplo = 'U'
     else:
         raise ValueError("uplo must be 'U' or 'L'")
-    
+
     real_dtype = np.dtype(np.float32)
     if A.dtype == np.complex64:
-        eig_func = cula.culaDeviceCheev        
+        eig_func = cula.culaDeviceCheev
     elif A.dtype == np.float32:
         eig_func = cula.culaDeviceSsyev
     else:
@@ -794,9 +846,9 @@ def eig_sym(G, compute_z = True, uplo = 'U'):
         else:
             raise ValueError('unsupported type')
         real_dtype = np.dtype(np.float64)
-    
+
     D = parray.empty(A.shape[0], real_dtype)
-    
+
     cula.culaInitialize()
     handle = cublashandle()
     if compute_z:
@@ -809,7 +861,7 @@ def eig_sym(G, compute_z = True, uplo = 'U'):
         return D, A.conj().T()
     else:
         return D
-    
+
 
 def add_eye(A, scale):
     if A.shape[0] != A.shape[1]:
@@ -823,7 +875,7 @@ def add_eye(A, scale):
 
 def FISTA_l2(A, b, L = 1, steps=5000):
     import time
-    
+
     xk = parray.zeros_like(b)
     t_k = 1
     t_km1 = 1
@@ -831,29 +883,29 @@ def FISTA_l2(A, b, L = 1, steps=5000):
     x_steps = steps/20
     handle = cublashandle()
     start = time.time()
-    
+
     for i in range(1,steps+1):
         yk = xk + ((t_km1-1)/t_k)*(xk-xkm1)
         err = dot(A, yk, handle = handle) - b
         temp = dot(A, err, handle = handle, opa='t')
         xkm1 = xk.copy()
         xk = yk - temp / L
-        
+
         t_kp1 = 0.5*(1+np.sqrt(1+4*t_k**2))
         t_km1 = t_k
         t_k = t_kp1
-        
+
         if i%x_steps == 0:
             ynorm = norm(err, handle = handle)
             print "%d, norm = %.10f, time=%f(ms)" % (
                   i / x_steps, ynorm, (time.time()-start)*1000)
     return xk
-        
-    
+
+
 def fista_l2_mpi(A, b, rank, diag, groupsize, col_comm,
                  row_comm, diag_comm, L = 1, steps = 4000):
     from mpi4py import MPI
-    
+
     if A.dtype != b.dtype:
         raise TypeError("matrix multiplication must have same dtype")
     if (len(A.shape) != 2) | (len(b.shape) != 2):
@@ -861,16 +913,16 @@ def fista_l2_mpi(A, b, rank, diag, groupsize, col_comm,
 
     col_rank = col_comm.Get_rank()
     row_rank = row_comm.Get_rank()
-    
+
     XOUTPUTSTEPS = min(20, steps)
     x_steps = steps / XOUTPUTSTEPS
-    
+
     L = float(L)
     d_xk = parray.zeros_like(b)
     t_k = 1.
     t_km1 = 1.
     d_xkm1 = d_xk.copy()
-    
+
     grid = (6 * cuda.Context.get_device().MULTIPROCESSOR_COUNT, 1)
     handle = cublashandle()
     d_err = parray.empty_like(b)
@@ -883,7 +935,7 @@ def fista_l2_mpi(A, b, rank, diag, groupsize, col_comm,
     d_yk = parray.empty_like(yk)
     err = np.zeros((A.shape[0],1), A.dtype)
     d_err = parray.empty_like(err)
-    
+
     if diag:
         temp_all = np.zeros((b.size*groupsize, 1), A.dtype)
         d_temp_all = parray.empty_like(temp_all)
@@ -894,7 +946,7 @@ def fista_l2_mpi(A, b, rank, diag, groupsize, col_comm,
 
     if rank == 0:
         start = MPI.Wtime()
-        
+
     for i in range(1,steps+1):
         if diag:
             d_yk = d_xk + ((t_km1-1)/t_k)*(d_xk-d_xkm1)
@@ -903,12 +955,12 @@ def fista_l2_mpi(A, b, rank, diag, groupsize, col_comm,
         d_yk.set(yk)
         d_temp = dot(A, d_yk, handle = handle)
         temp = d_temp.get()
-        
+
         row_comm.Gather(
             [temp, temp.size, mpitype],
             [temp_all if diag else None, temp.size, mpitype],
             root = col_rank)
-        
+
         if diag:
             d_temp_all.set(temp_all)
             update_err_func.prepared_call(
@@ -924,18 +976,18 @@ def fista_l2_mpi(A, b, rank, diag, groupsize, col_comm,
             [temp, temp.size, mpitype],
             [temp_all if diag else None, temp.size, mpitype],
             root = row_rank)
-        
+
         if diag:
             d_temp_all.set(temp_all)
             cuda.memcpy_dtod(d_xkm1.gpudata, d_xk.gpudata,
                              d_xk.size*d_xk.dtype.itemsize)
             update_xk_func.prepared_call(
-                grid, (256,1,1), d_xk.gpudata, d_yk.gpudata, 
+                grid, (256,1,1), d_xk.gpudata, d_yk.gpudata,
                 d_temp_all.gpudata, b.size, groupsize, L)
             t_kp1 = 0.5*(1+np.sqrt(1+4*t_k**2))
             t_km1 = t_k
             t_k = t_kp1
-        
+
             if i % x_steps == 0:
                 diag_comm.Reduce(ynorm, recv)
                 if rank == 0:
@@ -1036,7 +1088,7 @@ sq_Kernel(%(types)s* d_S, %(typeq)s* d_q, %(types)s rcond, int size)
 }
 
     """
-    mod = SourceModule(template % {"types": dtype_to_ctype(dtype_s), 
+    mod = SourceModule(template % {"types": dtype_to_ctype(dtype_s),
                        "typeq": dtype_to_ctype(dtype_q)})
     func = mod.get_function("sq_Kernel")
     func.prepare('PP'+np.dtype(dtype_s).char+'i')#[np.intp, np.intp,
@@ -1046,7 +1098,7 @@ sq_Kernel(%(types)s* d_S, %(typeq)s* d_q, %(types)s rcond, int size)
 
 
 @context_dependent_memoize
-def _get_eigsq_kernel(dtype_s, dtype_q):       
+def _get_eigsq_kernel(dtype_s, dtype_q):
     template = """
 #include <pycuda-complex.hpp>
 
@@ -1115,7 +1167,7 @@ sinv_Kernel(%(types)s* d_S, %(types)s rcond, int size)
         }
     }
 }
-        
+
     """
     mod = SourceModule(template % {"types": dtype_to_ctype(dtype_s)})
     func = mod.get_function("sinv_Kernel")
@@ -1177,7 +1229,7 @@ __global__ void adddiag(%(type)s* A, int ld, %(type)s value, int N)
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
     int total_threads = blockDim.x * gridDim.x;
 
-    for(int i = tid; i < N; i+=total_threads)                                 
+    for(int i = tid; i < N; i+=total_threads)
     {
         A[tid * ld + tid] += value;
     }
@@ -1191,4 +1243,3 @@ __global__ void adddiag(%(type)s* A, int ld, %(type)s value, int N)
     #    dtype.type if isinstance(dtype, np.dtype) else dtype,
     #    np.int32])
     return func
-

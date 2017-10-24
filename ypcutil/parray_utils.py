@@ -20,7 +20,7 @@ def _get_type(dtype):
 def get_fill_function(dtype, pitch = True):
     type_dst = dtype_to_ctype(dtype)
     name = "fill"
-    
+
     if pitch:
         func = SourceModule(
             fill_pitch_template % {
@@ -46,7 +46,7 @@ def get_astype_function(dtype_dest, dtype_src, pitch = True):
     type_src = dtype_to_ctype(dtype_src)
     name = "astype"
     operation = ""
-    
+
     if pitch:
         func = SourceModule(
                 pitch_template % {
@@ -71,10 +71,10 @@ def get_astype_function(dtype_dest, dtype_src, pitch = True):
     return func
 
 
-@context_dependent_memoize    
+@context_dependent_memoize
 def get_realimag_function(dtype, real = True, pitch = True):
     type_src = dtype_to_ctype(dtype)
-    
+
     if dtype == np.complex64:
         type_dest = "float"
         if real:
@@ -94,7 +94,7 @@ def get_realimag_function(dtype, real = True, pitch = True):
     else:
         raise TypeError("only support complex inputs are "
                         "numpy.complex64 or numpy.complex128")
-    
+
     if pitch:
         func = SourceModule(
                 pitch_template % {
@@ -138,7 +138,7 @@ def get_abs_function(dtype, pitch = True):
         operation = "abs"
         type_dest = dtype_to_ctype(dtype)
     name = "abs_function"
-    
+
     if pitch:
         func = SourceModule(
                 pitch_template % {
@@ -172,7 +172,7 @@ def get_angle_function(dtypein, dtypeout, pitch = True):
         fletter = "f"
     else:
         fletter = ""
-    
+
     if pitch:
         func = SourceModule(
                 pitch_angle_template % {
@@ -208,7 +208,7 @@ def get_conj_function(dtype, pitch = True):
         raise TypeError("Only complex arrays are allowed "
                         "to perform conjugation")
     name = "conj"
-    
+
     if pitch:
         func = SourceModule(
                 pitch_template % {
@@ -255,13 +255,13 @@ def get_transpose_function(dtype, conj = False):
     src_type = dtype_to_ctype(dtype)
     name = "trans"
     operation = ""
-    
+
     if conj:
         if dtype == np.complex128:
             operation = "pycuda::conj"
         elif dtype == np.complex64:
             operation = "pycuda::conj"
-    
+
     func = SourceModule(
             transpose_template % {
                 "name": name,
@@ -283,7 +283,7 @@ def get_addarray_function(left_dtype, right_dtype,
 
     name = "addarray"
     operation = "+"
-    
+
     if pitch:
         func = SourceModule(
                 pitch_array_op_template % {
@@ -316,7 +316,7 @@ def get_addscalar_function(src_type, dest_type, pitch = True):
     type_dest = dtype_to_ctype(dest_type)
     name = "addscalar"
     operation = "+"
-    
+
     if pitch:
         func = SourceModule(
                 pitch_left_scalar_op_template % {
@@ -349,7 +349,7 @@ def get_powarray_function(left_dtype, right_dtype,
 
     name = "powarray"
     operation = "pow"
-    
+
     if pitch:
         func = SourceModule(
                 pitch_array_func_template % {
@@ -384,7 +384,7 @@ def get_powscalar_function(src_type, dest_type, pitch = True):
     type_dest = dtype_to_ctype(dest_type)
     name = "powscalar"
     operation = "pow"
-    
+
     if pitch:
         func = SourceModule(
                 pitch_left_scalar_func_template % {
@@ -418,7 +418,7 @@ def get_subarray_function(left_dtype, right_dtype, rslt_dtype, pitch = True):
     type_rslt = dtype_to_ctype(rslt_dtype)
     name = "subdarray"
     operation = "-"
-    
+
     if pitch:
         func = SourceModule(
                 pitch_array_op_template % {
@@ -449,10 +449,10 @@ def get_subarray_function(left_dtype, right_dtype, rslt_dtype, pitch = True):
 def get_subscalar_function(src_type, dest_type, pitch = True):
     type_src = dtype_to_ctype(src_type)
     type_dest = dtype_to_ctype(dest_type)
-    
+
     name = "subscalar"
     operation = "-"
-    
+
     if pitch:
         func = SourceModule(
                 pitch_left_scalar_op_template % {
@@ -484,7 +484,7 @@ def get_scalarsub_function(src_type, dest_type, pitch = True):
 
     name = "scalarsub"
     operation = "-"
-    
+
     if pitch:
         func = SourceModule(
                 pitch_right_scalar_op_template % {
@@ -548,10 +548,10 @@ def get_mularray_function(left_dtype, right_dtype, rslt_dtype, pitch = True):
 def get_mulscalar_function(src_type, dest_type, pitch = True):
     type_src = dtype_to_ctype(src_type)
     type_dest = dtype_to_ctype(dest_type)
-    
+
     name = "mulscalar"
     operation = "*"
-    
+
     if pitch:
         func = SourceModule(
                 pitch_left_scalar_op_template % {
@@ -584,7 +584,7 @@ def get_divarray_function(left_dtype, right_dtype, rslt_dtype, pitch = True):
 
     name = "divarray"
     operation = "/"
-    
+
     if pitch:
         func = SourceModule(
                 pitch_array_op_template % {
@@ -615,10 +615,10 @@ def get_divarray_function(left_dtype, right_dtype, rslt_dtype, pitch = True):
 def get_divscalar_function(src_type, dest_type, pitch = True):
     type_src = dtype_to_ctype(src_type)
     type_dest = dtype_to_ctype(dest_type)
-    
+
     name = "divscalar"
     operation = "/"
-    
+
     if pitch:
         func = SourceModule(
                 pitch_left_scalar_op_template % {
@@ -647,10 +647,10 @@ def get_divscalar_function(src_type, dest_type, pitch = True):
 def get_scalardiv_function(src_type, dest_type, pitch = True):
     type_src = dtype_to_ctype(src_type)
     type_dest = dtype_to_ctype(dest_type)
-    
+
     name = "scalardiv"
     operation = "/"
-    
+
     if pitch:
         func = SourceModule(
                 pitch_right_scalar_op_template % {
@@ -680,9 +680,9 @@ def get_complex_function(real_type, imag_type, result_type, pitch = True):
     type_real = dtype_to_ctype(real_type)
     type_imag = dtype_to_ctype(imag_type)
     type_result = dtype_to_ctype(result_type)
-    
+
     name = "makecomplex"
-    
+
     if pitch:
         func = SourceModule(
                 pitch_complex_template % {
@@ -710,9 +710,9 @@ def get_complex_function(real_type, imag_type, result_type, pitch = True):
 def get_complex_from_amp_function(in_type, result_type, pitch = True):
     type_in = dtype_to_ctype(in_type)
     type_result = dtype_to_ctype(result_type)
-    
+
     name = "makecomplex_amp_phase"
-    
+
     if pitch:
         func = SourceModule(
                 pitch_complex_amp_template % {
@@ -776,7 +776,7 @@ def get_maxarray_function(left_dtype, right_dtype,
         operation = "max"
     else:
         operation = "fmax"
-    
+
     if pitch:
         func = SourceModule(
                 pitch_array_func_template % {
@@ -814,7 +814,7 @@ def get_maxscalar_function(src_type, dest_type, pitch = True):
         operation = "max"
     else:
         operation = "fmax"
-    
+
     if pitch:
         func = SourceModule(
                 pitch_left_scalar_func_template % {
@@ -852,7 +852,7 @@ def get_minarray_function(left_dtype, right_dtype,
         operation = "min"
     else:
         operation = "fmin"
-    
+
     if pitch:
         func = SourceModule(
                 pitch_array_func_template % {
@@ -890,7 +890,7 @@ def get_minscalar_function(src_type, dest_type, pitch = True):
         operation = "min"
     else:
         operation = "fmin"
-    
+
     if pitch:
         func = SourceModule(
                 pitch_left_scalar_func_template % {
@@ -951,7 +951,7 @@ def get_array_operator_function(src_type, dest_type, operator_name, pitch = True
 
 
 """templates"""
-            
+
 pycuda_complex_header = """
 #include <pycuda-complex.hpp>
 extern "C++" {
@@ -984,7 +984,7 @@ __device__ inline complex<double> operator/(
     return complex<double>((__z1._M_re*__z2._M_re+__z1._M_im*__z2._M_im)/nom,\
                            (__z1._M_im*__z2._M_re-__z1._M_re*__z2._M_im)/nom);
 }
-    
+
 template <class _Tp1, class _Tp2>
 __device__ inline complex<double> operator+(
     const complex<_Tp1>& __z, const _Tp2& __x)
@@ -994,7 +994,7 @@ template <class _Tp1, class _Tp2>
 __device__ inline complex<double> operator+(
     const _Tp1& __x, const complex<_Tp2>& __z)
 {return complex<double>(__z._M_re + __x, __z._M_im);}
-    
+
 template <class _Tp1, class _Tp2>
 __device__ inline complex<double> operator-(
     const complex<_Tp1>& __z, const _Tp2& __x)
@@ -1004,12 +1004,12 @@ template <class _Tp1, class _Tp2>
 __device__ inline complex<double> operator-(
     const _Tp1& __x, const complex<_Tp2>& __z)
 {return complex<double>(__x - __z._M_re, -__z._M_im);}
-    
+
 template <class _Tp1, class _Tp2>
 __device__ inline complex<double> operator*(
     const complex<_Tp1>& __z, const _Tp2& __x)
 {return complex<double>(__z._M_re * __x, __z._M_im * __x);}
-    
+
 template <class _Tp1, class _Tp2>
 __device__ inline complex<double> operator*(
     const _Tp1& __x, const complex<_Tp2>& __z)
@@ -1053,7 +1053,7 @@ __global__ void
     %(result_type)s tmp;
     int segment_per_row = ((N - 1) >> 5) + 1;
     int total_segments = M * segment_per_row;
-    
+
     for(int i = sid; i < total_segments; i+=total)
     {
         m = i / segment_per_row;
@@ -1109,7 +1109,7 @@ __global__ void
     int segment_per_row = ((N - 1) >> 5) + 1;
     int total_segments = M * segment_per_row;
     %(in_type)s c,s, a;
-    
+
     for(int i = sid; i < total_segments; i+=total)
     {
         m = i / segment_per_row;
@@ -1156,12 +1156,15 @@ transpose_template = """
 #include <pycuda-complex.hpp>
 #define TILE_DIM 32
 #define BLOCK_ROWS 8
-    
+
+#define tile(r, c) (tile[(r)*(TILE_DIM+1) + (c)])
+
 __global__ void
 %(name)s(const int M, const int N, %(type)s *odata,
          const int ldo, const %(type)s *idata, const int ldi)
 {
-    __shared__ %(type)s tile[TILE_DIM][TILE_DIM+1];
+    extern __shared__ %(type)s tile[];
+
     int xIndex, yIndex, index_in, index_out;
     int MM = ((M-1) >> 5) + 1;
     int NN = ((N-1) >> 5) + 1;
@@ -1173,11 +1176,12 @@ __global__ void
         index_in = xIndex + ldi * yIndex;
         if(xIndex < N)
         {
+            #pragma unroll
             for(int j = 0; j < TILE_DIM; j+=BLOCK_ROWS)
             {
                 if(yIndex + j < M)
                 {
-                    tile[threadIdx.y+j][threadIdx.x] = \
+                    tile(threadIdx.y+j, threadIdx.x) = \
                         (idata[index_in+j*ldi]);
                 }
             }
@@ -1190,12 +1194,13 @@ __global__ void
 
         if(xIndex < M)
         {
+            #pragma unroll
             for(int j = 0; j < TILE_DIM; j+=BLOCK_ROWS)
             {
                 if(yIndex + j < N)
                 {
                     odata[index_out+j*ldo] = \
-                        %(operation)s(tile[threadIdx.x][threadIdx.y+j]);
+                        %(operation)s(tile(threadIdx.x, threadIdx.y+j));
                 }
             }
         }
@@ -1243,7 +1248,7 @@ ld: leading dimension entries(aasumed to be row major)
 
 non_pitch_angle_template = """
 #include <pycuda-complex.hpp>
-            
+
 __global__ void
 %(name)s (%(dest_type)s *dest, const %(src_type)s *src, const int N)
 {
@@ -1297,10 +1302,10 @@ M: number of rows, N: number of columns,
 ld: leading dimension entries(aasumed to be row major)
 """
 
-            
+
 non_pitch_template = """
 #include <pycuda-complex.hpp>
-            
+
 __global__ void
 %(name)s (%(dest_type)s *dest, const %(src_type)s *src, const int N)
 {
@@ -1352,7 +1357,7 @@ __global__ void
 {
     const int totalthreads = blockDim.x * gridDim.x;
     const int tid = blockIdx.x * blockDim.x + threadIdx.x;
-                
+
     %(src_type)s tmp;
     int m,n;
     for (int i = tid; i < N * M; i += totalthreads)
@@ -1363,11 +1368,11 @@ __global__ void
         dest[m * ld_dest + n] =  %(operation)s (tmp);
     }
 }
-    
+
 """
 """
 launching MULTIPROCESSOR_COUNT*6 blocks of (256,1,1),
-M: number of rows, N: number of columns, 
+M: number of rows, N: number of columns,
 ld: leading dimension entries(aasumed to be row major)
 """
 
@@ -1389,7 +1394,7 @@ __global__ void
     %(right_type)s tmp_right;
     int segment_per_row = ((N - 1) >> 5) + 1;
     int total_segments = M * segment_per_row;
-        
+
     for(int i = sid; i < total_segments; i+=total)
     {
         m = i / segment_per_row;
@@ -1441,7 +1446,7 @@ __global__ void
     %(src_type)s tmp_left;
     int segment_per_row = ((N - 1) >> 5) + 1;
     int total_segments = M * segment_per_row;
-    
+
     for(int i = sid; i < total_segments; i+=total)
     {
         m = i / segment_per_row;
@@ -1490,7 +1495,7 @@ __global__ void
     %(src_type)s tmp_left;
     int segment_per_row = ((N - 1) >> 5) + 1;
     int total_segments = M * segment_per_row;
-    
+
     for(int i = sid; i < total_segments; i+=total)
     {
         m = i / segment_per_row;
@@ -1543,14 +1548,14 @@ __global__ void
     {
         m = i / segment_per_row;
         n = i %% segment_per_row;
-        dst[m * ld_dst + (n<<5) + tid] = value; 
+        dst[m * ld_dst + (n<<5) + tid] = value;
      }
 }
 
 """
 
 """
-launching MULTIPROCESSOR_COUNT*6 blocks of (32,8,1), 
+launching MULTIPROCESSOR_COUNT*6 blocks of (32,8,1),
 M: number of rows, N: number of columns,
 ld: leading dimension entries(aasumed to be row major)
 """
@@ -1567,7 +1572,7 @@ __global__ void
 
     for(int i = tid; i < M; i+=total)
     {
-        dst[i] = value; 
+        dst[i] = value;
     }
 }
 
@@ -1591,7 +1596,7 @@ __global__ void
     %(right_type)s tmp_right;
     int segment_per_row = ((N - 1) >> 5) + 1;
     int total_segments = M * segment_per_row;
-        
+
     for(int i = sid; i < total_segments; i+=total)
     {
         m = i / segment_per_row;
@@ -1644,7 +1649,7 @@ __global__ void
     %(src_type)s tmp_left;
     int segment_per_row = ((N - 1) >> 5) + 1;
     int total_segments = M * segment_per_row;
-    
+
     for(int i = sid; i < total_segments; i+=total)
     {
         m = i / segment_per_row;
@@ -1693,7 +1698,7 @@ __global__ void
     %(src_type)s tmp_left;
     int segment_per_row = ((N - 1) >> 5) + 1;
     int total_segments = M * segment_per_row;
-    
+
     for(int i = sid; i < total_segments; i+=total)
     {
         m = i / segment_per_row;
@@ -1739,11 +1744,11 @@ __global__ void
     const int bidx = blockIdx.x;
     const int bidy = blockIdx.y;
     const int dimy = blockDim.y;
-    
+
     int col = bidx *32 + tidx;
     extern __shared__ %(vector_type)s v[];
     __syncthreads();
-    
+
     if(tidy == 0)
     {
         if(col < N)
@@ -1751,9 +1756,9 @@ __global__ void
             v[tidx] = vector[col];
         }
     }
-    
+
     __syncthreads();
-    
+
     if(col < N)
     {
         for(int i = tidy + bidy*32; i < min(M, (bidy+1)*32); i += dimy)
@@ -1777,7 +1782,7 @@ __global__ void
     const int bidx = blockIdx.x;
     const int bidy = blockIdx.y;
     const int dimy = blockDim.y;
-    
+
     int col = bidx *32 + tidx;
     extern __shared__ %(vector_type)s v[];
     __syncthreads();
@@ -1789,9 +1794,9 @@ __global__ void
             v[tidx] = vector[col];
         }
     }
-    
+
     __syncthreads();
-    
+
     if(col < N)
     {
         for(int i = tidy + bidy*32; i < min(M, (bidy+1)*32); i += dimy)
@@ -1814,11 +1819,11 @@ __global__ void
     const int bidx = blockIdx.x;
     const int bidy = blockIdx.y;
     const int dimy = blockDim.y;
-    
+
     int col = bidy *32 + tidx; // actually row
     extern __shared__ %(vector_type)s v[];
     __syncthreads();
-    
+
     if(tidy == 0)
     {
         if(col < M)
@@ -1826,9 +1831,9 @@ __global__ void
             v[tidx] = vector[col];
         }
     }
-    
+
     __syncthreads();
-    
+
     col = bidx*32 + tidx;
     int a = tidy;
     if(col < N)
@@ -1854,7 +1859,7 @@ __global__ void
     const int bidx = blockIdx.x;
     const int bidy = blockIdx.y;
     const int dimy = blockDim.y;
-    
+
     int col = bidy *32 + tidx; // actually row
     extern __shared__ %(vector_type)s v[];
     __syncthreads();
@@ -1866,9 +1871,9 @@ __global__ void
             v[tidx] = vector[col];
         }
     }
-    
+
     __syncthreads();
-    
+
     col = bidx*32 + tidx;
     int a = tidy;
     if(col < N)

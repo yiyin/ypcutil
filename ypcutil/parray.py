@@ -319,7 +319,13 @@ class PitchArray(object):
         self.nbytes = self.dtype.itemsize * self.mem_size
         self._grid, self._block = splay(self.mem_size, self.M)
 
-    def set(self, ary):
+    def set(self, ary, stream = None):
+        if stream is None:
+            self._set(ary)
+        else:
+            self._set_async(ary, stream = stream)
+
+    def _set(self, ary):
         """
         Set PitchArray with an numpy.ndarray
 
@@ -339,9 +345,9 @@ class PitchArray(object):
                 cuda.memcpy_htod(int(self.gpudata), ary)
             else:
                 PitchTrans(self.shape, int(self.gpudata),
-                           self.ld, ary, _pd(self.shape), self.dtype)
+                               self.ld, ary, _pd(self.shape), self.dtype)
 
-    def set_async(self, ary, stream=None):
+    def _set_async(self, ary, stream=None):
         """
         Set PitchArray with an numpy.ndarray
         using asynchrous memroy transfer
@@ -374,7 +380,13 @@ class PitchArray(object):
                            _pd(self.shape), self.dtype, async = True,
                            stream = stream)
 
-    def get(self, ary = None, pagelocked = False):
+    def get(self, ary = None, stream = None, pagelocked = False):
+        if stream is None:
+            return self._get(ary = ary, pagelocked = pagelocked)
+        else:
+            return self._get_async(ary = ary, stream = stream)
+
+    def _get(self, ary = None, pagelocked = False):
         """
         Get the PitchArray to an ndarray
 
@@ -410,7 +422,7 @@ class PitchArray(object):
         return ary
 
 
-    def get_async(self, stream = None, ary = None):
+    def _get_async(self, stream = None, ary = None):
         """
         Get the PitchArray to an ndarray asynchronously
 
@@ -1757,7 +1769,7 @@ class PitchArray(object):
                         result.gpudata, result.ld, self.gpudata, self.ld)
             return result
 
-    def T(self):
+    def T(self, stream = None):
         """
         Returns the transpose
         PitchArray must be 2 dimensional
@@ -1777,9 +1789,17 @@ class PitchArray(object):
         result = PitchArray(shape_t, self.dtype)
         if self.size:
             func = pu.get_transpose_function(self.dtype)
-            func.prepared_call(self._grid, self._block, self.shape[0],
-                               self.shape[1], result.gpudata,
-                               result.ld, self.gpudata, self.ld)
+            if stream is None:
+                func.prepared_call(self._grid, self._block, self.shape[0],
+                                   self.shape[1], result.gpudata,
+                                   result.ld, self.gpudata, self.ld,
+                                   shared_size = self.dtype.itemsize*33*32)
+            else:
+                func.prepared_async_call(self._grid, self._block, stream,
+                                         self.shape[0], self.shape[1],
+                                         result.gpudata, result.ld,
+                                         self.gpudata, self.ld,
+                                         shared_size = self.dtype.itemsize*33*32)
         return result
 
     def H(self):
@@ -1803,7 +1823,8 @@ class PitchArray(object):
             func = pu.get_transpose_function(self.dtype, conj = True)
             func.prepared_call(self._grid, self._block, self.shape[0],
                                self.shape[1], result.gpudata, result.ld,
-                               self.gpudata, self.ld)
+                               self.gpudata, self.ld,
+                               shared_size = self.dtype.itemsize*33*32)
         return result
 
     def copy_rows(self, start, stop, step = 1):
@@ -2070,7 +2091,8 @@ def to_gpu_async(ary, stream = None):
     Transfer a pagelocked numpy ndarray to a PitchArray
     """
     result = PitchArray(ary.shape, ary.dtype)
-    result.set_async(ary, stream)
+    result.set(ary, stream = stream)
+    return result
 
 
 empty = PitchArray
