@@ -15,7 +15,7 @@ def file_attr(filename):
     h5file = tables.open_file(filename)
     n = h5file.root._v_nchildren
     if n == 1:
-        c = h5file.root._f_listNodes()[0]
+        c = h5file.root._f_list_nodes()[0]
         dtype = c.dtype
         shape = c.shape
     elif n == 2:
@@ -28,7 +28,7 @@ def file_attr(filename):
         shape = h5file.root.real.shape
     h5file.close()
     return shape, dtype
-    
+
 
 def write_memory_to_file(A, filename, mode = 'w',
                          title = 'test', complevel = None,
@@ -37,17 +37,17 @@ def write_memory_to_file(A, filename, mode = 'w',
     write memory to a h5 file
     h5 file contains root.real and root.imag(if A complex)
     best for transfer data with Matlab
-    
+
     A: a ndarray, GPUArray or PitchArray
     filename: name of file to store
     mode: 'w' to start a new file
           'a' to append, leading dimension of A must be the
            same as the existing file
-    
+
     file can be read by read_file or in matlab using h5read.m
     """
     h5file = tables.open_file(filename, mode, title)
-    
+
     if complevel is not None:
         filters = tables.Filters(complevel=complevel, complib='zlib')
     else:
@@ -79,7 +79,7 @@ def write_memory_to_file(A, filename, mode = 'w',
 
     shape = list(B.shape)
     shape[0] = 0
-    
+
     if mode == 'w':
         if np.iscomplexobj(B):
             h5file.create_earray("/","real", tb(),
@@ -109,13 +109,13 @@ def write_array(A, filename, mode = 'w', title = 'test',
     """
     write memory to a h5 file
     h5 file contains root.arrat(A real or complex)
-    
+
     A: a ndarray, GPUArray or PitchArray
     filename: name of file to store
     mode: 'w' to start a new file
           'a' to append, leading dimension of A must
            be the same as the existing file
-    
+
     file can be read by read_array in python
     """
 
@@ -125,7 +125,7 @@ def write_array(A, filename, mode = 'w', title = 'test',
         filters = tables.Filters(complevel=complevel, complib='zlib')
     else:
         filters = None
-    
+
     if (A.dtype == np.float32):
         tb = tables.Float32Atom
     elif (A.dtype == np.float64):
@@ -154,7 +154,7 @@ def write_array(A, filename, mode = 'w', title = 'test',
 
     shape = list(B.shape)
     shape[0] = 0
-    
+
     if mode == 'w':
         if (A.dtype == np.complex64):
             h5file.create_earray("/","array", tb(8),
@@ -189,10 +189,10 @@ def read_file(filename, start = None, stop = None, step = 1):
         r = h5file.root.real.read(start = start, stop = stop, step = step)
         i = h5file.root.imag.read(start = start, stop = stop, step = step)
         cl = r.dtype
-        #a = h5file.root.real.read() + 
+        #a = h5file.root.real.read() +
         #    (np.array(1j).astype(np.complex64))*h5file.root.imag.read()
         a = r + (np.array(1j).astype(np.complex64))*i
-    h5file.close()    
+    h5file.close()
     return a
 
 
@@ -203,7 +203,7 @@ def read_array(filename, start = None, stop = None, step = 1):
     """
     h5file = tables.open_file(filename, "r")
     n = h5file.root._v_nchildren
-        
+
     a = h5file.root.array.read(start = start, stop = stop, step = step)
     h5file.close()
     return a
@@ -217,15 +217,11 @@ def read(filename, start = None, stop = None, step = 1):
     n = h5file.root._v_nchildren
 
     if n == 1:
-        c = h5file.root._f_listNodes()[0]
+        c = h5file.root._f_list_nodes()[0]
         a = c.read(start = start, stop = stop, step = step)
     elif n == 2:
         r = h5file.root.real.read(start = start, stop = stop, step = step)
         i = h5file.root.imag.read(start = start, stop = stop, step = step)
         a = r + 1j*i
-    h5file.close()    
+    h5file.close()
     return a
-
-    
-    
-    
