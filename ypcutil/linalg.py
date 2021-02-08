@@ -9,8 +9,8 @@ from pycuda.compiler import SourceModule
 import skcuda.cublas as cublas
 import skcuda.cula as cula
 import skcuda.cusolver as cusolver
-import parray
-import simpleio as si
+from . import parray
+from . import simpleio as si
 
 
 """ assuming row major storage as in PitchArray """
@@ -530,7 +530,7 @@ def pinv(G, rcond = 1e-8):
          pseudo-inverse of G matrix
     """
     U,S,V = svd(G, econ=1)
-    print "using absolute rcond:", S[0].get()*rcond, "in inversion"
+    print("using absolute rcond:", S[0].get()*rcond, "in inversion")
     sv_func = _get_svinv_kernel(S.dtype, V.dtype)
     sv_func.prepared_call(
         (S.size, 1), (256,1,1), S.gpudata, V.gpudata,
@@ -559,7 +559,7 @@ def pinv_sym(G, rcond = 1e-8):
          pseudo-inverse of G matrix
     """
     S,V = svd(G, compute_u=0)
-    print "using absolute rcond:", S[0].get()*rcond, "in inversion"
+    print("using absolute rcond:", S[0].get()*rcond, "in inversion")
     V_2 = V.copy()
     sv_func = _get_svinv_kernel(S.dtype, V.dtype)
     sv_func.prepared_call(
@@ -595,7 +595,7 @@ def solve_eq(G, q, rcond = 1e-8):
                          "the same of size of q")
     U,S,V = svd(G, econ=1)
     qq = dot(U, q, opa='c')
-    print "using absolute rcond:", S[0].get()*rcond, "in inversion"
+    print("using absolute rcond:", S[0].get()*rcond, "in inversion")
     sq_func = _get_sq_kernel(S.dtype, qq.dtype)
     sq_func.prepared_call(
         (6 * cuda.Context.get_device().MULTIPROCESSOR_COUNT, 1),
@@ -650,7 +650,7 @@ def solve_eq_sym(G, q, rcond = 1e-8, save_singular = None, cut_num = None, disp_
 
     qq = dot(U, q, opa='c')
     if disp_rcond:
-        print "using absolute rcond:", S[0].get()*rcond, "in inversion"
+        print("using absolute rcond:", S[0].get()*rcond, "in inversion")
 
     sq_func = _get_sq_kernel(S.dtype, qq.dtype)
     sq_func.prepared_call(
@@ -703,7 +703,7 @@ def solve_eq_sym_mixed(G, qr, qi, rcond = 1e-8, save_singular = None, cut_num = 
             rcond = (S[cut_num].get()+S[cut_num-1].get())/2/S[0].get()
 
     qqr = dot(U, qr, opa='c')
-    print "using absolute rcond:", S[0].get()*rcond, "in inversion"
+    print("using absolute rcond:", S[0].get()*rcond, "in inversion")
 
     sq_func = _get_sq_kernel(S.dtype, qqr.dtype)
     sq_func.prepared_call(
@@ -880,7 +880,7 @@ def FISTA_l2(A, b, L = 1, steps=5000):
     t_k = 1
     t_km1 = 1
     xkm1 = xk.copy()
-    x_steps = steps/20
+    x_steps = steps//20
     handle = cublashandle()
     start = time.time()
 
@@ -897,8 +897,8 @@ def FISTA_l2(A, b, L = 1, steps=5000):
 
         if i%x_steps == 0:
             ynorm = norm(err, handle = handle)
-            print "%d, norm = %.10f, time=%f(ms)" % (
-                  i / x_steps, ynorm, (time.time()-start)*1000)
+            print("%d, norm = %.10f, time=%f(ms)" % (
+                  i / x_steps, ynorm, (time.time()-start)*1000))
     return xk
 
 
@@ -915,7 +915,7 @@ def fista_l2_mpi(A, b, rank, diag, groupsize, col_comm,
     row_rank = row_comm.Get_rank()
 
     XOUTPUTSTEPS = min(20, steps)
-    x_steps = steps / XOUTPUTSTEPS
+    x_steps = steps // XOUTPUTSTEPS
 
     L = float(L)
     d_xk = parray.zeros_like(b)
@@ -991,9 +991,9 @@ def fista_l2_mpi(A, b, rank, diag, groupsize, col_comm,
             if i % x_steps == 0:
                 diag_comm.Reduce(ynorm, recv)
                 if rank == 0:
-                    print "%d, norm = %.10f, time=%f(ms)" % (
+                    print("%d, norm = %.10f, time=%f(ms)" % (
                           i / x_steps, np.sqrt(recv[0]),
-                          (MPI.Wtime()-start)*1000)
+                          (MPI.Wtime()-start)*1000))
     return d_xk
 
 

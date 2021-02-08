@@ -6,7 +6,7 @@ import pycuda.gpuarray as garray
 import numpy as np
 from timing import func_timer
 from simpleio import *
-import parray
+from . import parray
 
 cuda.init()
 context1 = cuda.Device(1).make_context()

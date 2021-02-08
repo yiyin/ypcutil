@@ -7,7 +7,7 @@ from pycuda.compiler import SourceModule
 import pycuda.gpuarray as gpuarray
 import scikits.cuda.cufft as cufft
 
-import ypcutil.parray as parray
+from . import parray as parray
 
 class fftplan(object):
     """
@@ -124,7 +124,7 @@ class fftplan(object):
         if inembed is None:
             inembed = np.asarray(self.shape, np.int32)
             if self.econ and not self.forward:
-                inembed[-1] = inembed[-1]/2+1
+                inembed[-1] = inembed[-1]//2+1
         else:
             if len(inembed) != self.ndim:
                 raise ValueError("size of inembed speicified not correct")
@@ -134,7 +134,7 @@ class fftplan(object):
         if onembed is None:
             onembed = np.asarray(self.shape, np.int32)
             if self.econ and self.forward:
-                onembed[-1] = onembed[-1]/2+1
+                onembed[-1] = onembed[-1]//2+1
         else:
             if len(onembed) != self.ndim:
                 raise ValueError("size of onembed speicified not correct")
@@ -321,12 +321,12 @@ def _fft_gpuarray(d_A, econ = False, batch_size = 128):
     realA = parray.isrealobj(A)
     
     if econ and not realA:
-        print ("Warning ypcutil.fft.fft: "
+        print("Warning ypcutil.fft.fft: "
                "requested econ outputs, but getting complex inputs. "
                "econ is neglected")
     outdtype = parray.floattocomplex(A.dtype)
     d_output = gpuarray.empty(
-        (total_inputs, size/2+1 if econ and realA else size),
+        (total_inputs, size//2+1 if econ and realA else size),
         outdtype)
     
     batch_size = min(total_inputs, batch_size)
@@ -407,7 +407,7 @@ def _fft_parray(d_A, econ = False, batch_size = 128):
                "econ is neglected")
     outdtype = parray.floattocomplex(A.dtype)
     d_output = parray.empty(
-        (total_inputs, size/2+1 if econ and realA else size),
+        (total_inputs, size//2+1 if econ and realA else size),
         outdtype)
     
     batch_size = min(total_inputs, batch_size)
@@ -728,7 +728,7 @@ def _fft2_parray(d_A, econ = False, batch_size = 8):
     outdtype = parray.floattocomplex(d_A.dtype)
     outshape = [b for b in d_A.shape]
     if econ and realA:
-        outshape[-1] = outshape[-1]/2+1
+        outshape[-1] = outshape[-1]//2+1
     d_output = parray.empty(outshape, outdtype)
     batch_size = min(total_inputs, batch_size)
     
@@ -805,7 +805,7 @@ def _fft2_gpuarray(d_A, econ = False, batch_size = 8):
     outdtype = parray.floattocomplex(d_A.dtype)
     outshape = [b for b in d_A.shape]
     if econ and realA:
-        outshape[-1] = outshape[-1]/2+1
+        outshape[-1] = outshape[-1]//2+1
     d_output = gpuarray.empty(outshape, outdtype)
     batch_size = min(total_inputs, batch_size)
     input_total_elements = size[0]*size[1]
@@ -1040,7 +1040,7 @@ def _ifft2_gpuarray(d_A, econ = False, even_size = None,
     d_output = (gpuarray.empty((total_inputs, size[0], size[1]), outdtype) if
                     ndim == 3 else gpuarray.empty(size, outdtype))
     
-    input_total_elements = size[0]*(size[1]/2+1 if econ else size[1])
+    input_total_elements = size[0]*(size[1]//2+1 if econ else size[1])
     output_total_elements = size[0]*size[1]
     batch_size = min(total_inputs, batch_size)
     plan = fftplan(size, d_A.dtype, input_total_elements,
@@ -1117,7 +1117,7 @@ def _fft3_parray(d_A, shape, econ = False, batch_size = 4):
     outdtype = parray.floattocomplex(d_A.dtype)
     outsize = [b for b in shape]
     if econ and realA:
-        outsize[-1] = outsize[-1]/2+1
+        outsize[-1] = outsize[-1]//2+1
     output_total_elements = outsize[0]*outsize[1]*outsize[2]
     d_output = parray.empty((total_inputs, output_total_elements), outdtype)
     batch_size = min(total_inputs, batch_size)
@@ -1192,7 +1192,7 @@ def _fft3_gpuarray(d_A, econ = False, batch_size = 4):
     outdtype = parray.floattocomplex(d_A.dtype)
     outshape = [b for b in d_A.shape]
     if econ and realA:
-        outshape[-1] = outshape[-1]/2+1
+        outshape[-1] = outshape[-1]//2+1
     d_output = gpuarray.empty(outshape, outdtype)
     batch_size = min(total_inputs, batch_size)
     input_total_elements = size[0]*size[1]*size[2]
@@ -1397,7 +1397,7 @@ def _ifft3_gpuarray(d_A, econ = False, even_size = None,
         gpuarray.empty((total_inputs, size[0], size[1], size[2]), outdtype) if
         ndim == 4 else gpuarray.empty(size, outdtype))
     
-    input_total_elements = size[0]*size[1]*(size[2]/2+1 if econ else size[2])
+    input_total_elements = size[0]*size[1]*(size[2]//2+1 if econ else size[2])
     output_total_elements = size[0]*size[1]*size[2]
     
     batch_size = min(total_inputs, batch_size)

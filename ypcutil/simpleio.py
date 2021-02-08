@@ -99,9 +99,9 @@ def write_memory_to_file(A, filename, mode = 'w',
     h5file.close()
     if verbose:
         if mode == 'w':
-            print "file %s created" % (filename)
+            print("file %s created" % (filename))
         else:
-            print "file %s attached" % (filename)
+            print("file %s attached" % (filename))
 
 
 def write_array(A, filename, mode = 'w', title = 'test',
@@ -169,9 +169,9 @@ def write_array(A, filename, mode = 'w', title = 'test',
     h5file.close()
     if verbose:
         if mode == 'w':
-            print "file %s created" % (filename)
+            print("file %s created" % (filename))
         else:
-            print "file %s attached" % (filename)
+            print("file %s attached" % (filename))
 
 
 def read_file(filename, start = None, stop = None, step = 1):

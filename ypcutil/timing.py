@@ -20,6 +20,6 @@ def func_timer(f):
         if cudaflag:
             cuda.Context.synchronize()
         stop = time.time()
-        print 'execution time = %.3f ms' % ((stop-start)*1000)
+        print('execution time = %.3f ms' % ((stop-start)*1000))
         return res
     return wrapper

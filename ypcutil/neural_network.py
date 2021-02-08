@@ -7,8 +7,8 @@ import pycuda.driver as cuda
 from pycuda.tools import dtype_to_ctype
 from pycuda.compiler import SourceModule
 
-import parray
-import linalg as la
+from . import parray
+from . import linalg as la
 
 
 def rnn1(G, q, dt = 1e-6, alpha = 5000, steps = 4000,

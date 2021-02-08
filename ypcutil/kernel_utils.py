@@ -63,7 +63,7 @@ def launch_kernel(func, block, grid, argins, timed = None, shared = None, texref
                     arg_type.append(np.complex128)
                     arg_call.append(np.complex128(b))
             else:
-                print "warning: unknown type"
+                print("warning: unknown type")
                 arg_type.append(a.__class__)
                 arg_call.append(a)
                 
@@ -104,7 +104,7 @@ def launch_kernel(func, block, grid, argins, timed = None, shared = None, texref
             arg_call.append(a)
             
         else:
-            print "launch kernel warning: unknown type"
+            print("launch kernel warning: unknown type")
             arg_type.append(a.__class__)
             arg_call.append(a)
 
@@ -123,7 +123,7 @@ def launch_kernel(func, block, grid, argins, timed = None, shared = None, texref
             return a()
         else:
             time = a()
-            print "%s returned in: %f ms" % (timed, time * 1000)
+            print("%s returned in: %f ms" % (timed, time * 1000))
             
 
 

@@ -10,7 +10,7 @@ import numpy as np
 import pycuda.driver as cuda
 from pytools import memoize
 
-import parray_utils as pu
+from . import parray_utils as pu
 
 """ utilities"""
 @memoize
@@ -126,7 +126,7 @@ def _assignshape(shape, axis, value):
 
 
 def PitchTrans(shape, dst, dst_ld, src, src_ld, dtype, aligned=False,
-               async = False, stream = None):
+               async_trans = False, stream = None):
     """
     Wrapper around cuda.Memcpy2D
     Enable pitched memory transfer.
@@ -135,11 +135,11 @@ def PitchTrans(shape, dst, dst_ld, src, src_ld, dtype, aligned=False,
     ----------
     shape : tuple of ints
         shape of the 2D array to be transferred.
-    dst : { cuda.DeviceAllocation, int, long }
+    dst : { cuda.DeviceAllocation, int}
         pointer to the device memory to be transferred to.
     dst_ld: int
         leading dimension (pitch) of destination.
-    src : { pycuda.driver.DeviceAllocation, int, long }
+    src : { pycuda.driver.DeviceAllocation, int }
         pointer to the device memory to be transferred from.
     src_ld : int
         leading dimension (pitch) of source.
@@ -150,7 +150,7 @@ def PitchTrans(shape, dst, dst_ld, src, src_ld, dtype, aligned=False,
         if aligned is False, tolerate device-side misalignment for
         device-to-device copies that may lead to loss of copy bandwidth.
         (default: False).
-    async : bool
+    async_trans : bool
         use asynchronous transfer (default: False).
     stream : pycuda.driver.stream
         specify the cuda stream (default: None).
@@ -160,13 +160,13 @@ def PitchTrans(shape, dst, dst_ld, src, src_ld, dtype, aligned=False,
 
     trans = cuda.Memcpy2D()
     trans.src_pitch = src_ld * size
-    if isinstance(src, (cuda.DeviceAllocation, int, long)):
+    if isinstance(src, (cuda.DeviceAllocation, int)):
         trans.set_src_device(src)
     else:
         trans.set_src_host(src)
 
     trans.dst_pitch = dst_ld * size
-    if isinstance(dst, (cuda.DeviceAllocation, int, long)):
+    if isinstance(dst, (cuda.DeviceAllocation, int)):
         trans.set_dst_device(dst)
     else:
         trans.set_dst_host(dst)
@@ -174,7 +174,7 @@ def PitchTrans(shape, dst, dst_ld, src, src_ld, dtype, aligned=False,
     trans.width_in_bytes = _pd(shape) * size
     trans.height = int(shape[0])
 
-    if async:
+    if async_trans:
         trans(stream)
     else:
         trans(aligned = aligned)
@@ -268,7 +268,7 @@ class PitchArray(object):
                     self.gpudata, pitch = cuda.mem_alloc_pitch(
                         int(_pd(self.shape) * np.dtype(dtype).itemsize),
                         self.shape[0], np.dtype(dtype).itemsize)
-                    self.ld = pitch / np.dtype(dtype).itemsize
+                    self.ld = pitch // np.dtype(dtype).itemsize
                     self.mem_size = self.ld * self.shape[0]
                     self.M = self.shape[0]
                     self.N = _pd(self.shape)
@@ -304,7 +304,7 @@ class PitchArray(object):
                                         * np.dtype(dtype).itemsize)
                                         / 512) * 512)
 
-                    self.ld = pitch / np.dtype(dtype).itemsize
+                    self.ld = pitch // np.dtype(dtype).itemsize
                     self.mem_size = self.ld * self.shape[0]
                     self.M = self.shape[0]
                     self.N = _pd(self.shape)
@@ -314,7 +314,7 @@ class PitchArray(object):
                 self.N = 0
                 self.ld = 0
                 self.mem_size = 0
-                print "warning: shape may not be assigned properly"
+                print("warning: shape may not be assigned properly")
             self.base = base
         self.nbytes = self.dtype.itemsize * self.mem_size
         self._grid, self._block = splay(self.mem_size, self.M)
@@ -377,7 +377,7 @@ class PitchArray(object):
                 cuda.memcpy_htod_async(int(self.gpudata), ary, stream)
             else:
                 PitchTrans(self.shape, int(self.gpudata), self.ld, ary,
-                           _pd(self.shape), self.dtype, async = True,
+                           _pd(self.shape), self.dtype, async_trans = True,
                            stream = stream)
 
     def get(self, ary = None, stream = None, pagelocked = False):
@@ -452,7 +452,7 @@ class PitchArray(object):
             else:
                 PitchTrans(self.shape, ary, _pd(self.shape),
                            int(self.gpudata), self.ld, self.dtype,
-                           async = True, stream = stream)
+                           async_trans = True, stream = stream)
 
         return ary
 
@@ -2428,7 +2428,7 @@ def bsxfun_right(array, vector, operator = '*', inplace = False):
 
     func = pu.get_bsxfun_function(array.dtype, vector.dtype, result.dtype,
                                   operator, direction, 'right')
-    func.prepared_call( ((array.N-1)/32+1, (array.M-1)/32+1),
+    func.prepared_call( ((array.N-1)//32+1, (array.M-1)//32+1),
                          (32, 8, 1), array.gpudata, array.ld,
                          vector.gpudata, result.gpudata, result.ld,
                          array.M, array.N,
@@ -2462,7 +2462,7 @@ def bsxfun_left(array, vector, operator = '*', inplace = False):
 
     func = pu.get_bsxfun_function(array.dtype, vector.dtype, result.dtype,
                                   operator, direction, 'left')
-    func.prepared_call( ((array.N-1)/32+1, (array.M-1)/32+1),
+    func.prepared_call( ((array.N-1)//32+1, (array.M-1)//32+1),
                          (32, 8, 1), array.gpudata, array.ld,
                          vector.gpudata, result.gpudata, result.ld,
                          array.M, array.N,
